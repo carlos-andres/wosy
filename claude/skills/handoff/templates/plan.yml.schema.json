@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.local/schemas/plan.yml.schema.json",
+  "title": "Plan",
+  "description": "A plan groups one objective and the N tasks that ship it.",
+  "type": "object",
+  "required": ["id", "created", "status", "objective", "tasks"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+      "description": "Plan id, unique within its project. Kebab-case, ≤64 chars."
+    },
+    "created": {
+      "type": "string",
+      "format": "date",
+      "description": "UTC date (YYYY-MM-DD) when the plan was opened."
+    },
+    "updated": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "done", "archived"],
+      "description": "Lifecycle state. `archived` means /consolidate has moved the plan folder."
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 10,
+      "description": "One sentence — the falsifiable goal of this plan."
+    },
+    "backlog": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Free-form items deferred from the active task set; promoted to tasks as scope clarifies."
+    },
+    "status_notes": {
+      "type": "string",
+      "description": "Single-paragraph snapshot of plan state. Rewritten on phase change; never appended."
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "role": { "type": "string", "enum": ["target", "adjacent", "background"] }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+      },
+      "description": "Ordered list of task ids living under tasks/<task-id>/task.yml."
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question", "raised_by"],
+        "additionalProperties": false,
+        "properties": {
+          "question": { "type": "string" },
+          "raised_by": { "type": "string", "enum": ["claude", "user", "brain-reconcile"] },
+          "resolved": { "type": "boolean", "default": false },
+          "resolution": { "type": "string" }
+        }
+      },
+      "description": "Items surfaced by `brain reconcile` or by Claude mid-work for user lock."
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ticket": { "type": "string" },
+        "branch": { "type": "string" },
+        "pr": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/edge.schema.json",
+  "title": "edge",
+  "$comment": "A graph edge in JOIN-TABLE form (the alternative to adjacency-in-record edges[]). NOT one of the 6 completeness-law record types -- it is the traversable-graph structure (R2: 'what connects to X' answered by a query, not a scan). The LINKER emits these on write. Edge STORAGE (this join-table shape vs inline edges[] in each record) is the P0/P1 open item; both shapes are fixed here so either store satisfies the same contract.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "edge" },
+    "from": {
+      "$comment": "Source record id.",
+      "$ref": "_base.schema.json#/$defs/id"
+    },
+    "rel": { "$ref": "_base.schema.json#/$defs/rel" },
+    "to": {
+      "$comment": "Target record id.",
+      "$ref": "_base.schema.json#/$defs/id"
+    },
+    "note": { "type": "string" }
+  },
+  "required": ["type", "from", "rel", "to"],
+  "additionalProperties": false
+}

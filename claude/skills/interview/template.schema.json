@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.local/schemas/interview/template.schema.json",
+  "title": "InterviewRecord",
+  "description": "Frontmatter contract for .devwork/interview/<id>.md records written by the /interview skill. Tier-conditional required fields via if/then/else.",
+  "type": "object",
+  "required": [
+    "id", "created", "status", "tier", "schema_version",
+    "doc_kind", "subject"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+      "description": "Ticket id (preserves case) OR kebab-case noun phrase ≤64 chars."
+    },
+    "created": { "type": "string", "format": "date" },
+    "updated": { "type": "string", "format": "date" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "locked", "superseded"]
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["trivial", "standard", "heavy"]
+    },
+    "schema_version": { "type": "integer", "const": 1 },
+    "project": { "type": "string" },
+    "session_origin": { "type": "string" },
+    "doc_kind": {
+      "type": "string",
+      "enum": ["interview", "context-for-implementation"]
+    },
+    "supersedes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "subject": { "type": "string", "minLength": 5 },
+    "objective": { "type": "string", "minLength": 10 },
+    "requirement": { "type": "string", "minLength": 10 },
+    "done_when": { "type": "string", "minLength": 10 },
+    "code": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "role": { "type": "string", "enum": ["target", "adjacent"] },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "source": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["doc", "code-example", "pattern", "api-spec", "sibling-project", "data"]
+          },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "precedents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "ref"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["decision", "interview", "pr", "incident", "conversation"]
+          },
+          "ref": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "deferred": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "rollback": { "type": "string" },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "required": ["question"],
+            "additionalProperties": false,
+            "properties": {
+              "question": { "type": "string" },
+              "raised_by": { "type": "string", "enum": ["claude", "user", "brain-reconcile"] },
+              "resolved": { "type": "boolean" },
+              "resolution": { "type": "string" }
+            }
+          }
+        ]
+      }
+    },
+    "exit": {
+      "type": "string",
+      "enum": ["intake-now", "spec-only-park", "just-do-it"]
+    },
+    "warm": {
+      "type": "object",
+      "required": ["project"],
+      "additionalProperties": false,
+      "properties": {
+        "project": { "type": "string" },
+        "cache_version": { "type": "string" }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ts", "actor", "event"],
+        "additionalProperties": false,
+        "properties": {
+          "ts": { "type": "string", "format": "date-time" },
+          "actor": { "type": "string", "enum": ["claude", "user", "hook"] },
+          "event": {
+            "type": "string",
+            "enum": ["created", "resumed", "locked", "superseded", "exit-changed"]
+          },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "doc_kind": { "const": "interview" } }, "required": ["doc_kind"] },
+      "then": { "required": ["exit"] }
+    },
+    {
+      "if": { "properties": { "tier": { "const": "standard" } }, "required": ["tier"] },
+      "then": { "required": ["objective", "done_when"] }
+    },
+    {
+      "if": { "properties": { "tier": { "const": "heavy" } }, "required": ["tier"] },
+      "then": {
+        "required": ["objective", "requirement", "done_when", "code", "constraints"],
+        "properties": { "code": { "minItems": 1 } }
+      }
+    }
+  ]
+}

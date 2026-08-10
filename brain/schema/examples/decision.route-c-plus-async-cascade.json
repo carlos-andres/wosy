@@ -1,0 +1,13 @@
+{
+  "id": "dec-route-c-plus-async-cascade",
+  "type": "decision",
+  "title": "Cascade via end-of-batch hook + sweeper, drop self-rescheduling watchdog",
+  "status": "done",
+  "updated": "2026-04-30",
+  "context": "Route C emits subscription_type from the worker, but the inventory cascade needs a trigger. A self-rescheduling watchdog job was the first proposal; it risks unbounded reschedule loops and is hard to reason about.",
+  "decision": "Synthesize Route C (worker emit) with an ASYNC cascade triggered PRIMARY by an end-of-batch drain hook in ProcessFeedQueueJob and backed by a daily sweeper command as the safety net. Drop the self-rescheduling watchdog.",
+  "consequences": "Simpler, idempotent, kill-switchable (FEED_SUBSCRIPTION_CASCADE_ENABLED). Partial-drain race remains (documented, deferred to 1407 wire-back).",
+  "edges": [
+    { "rel": "relates_to", "to": "acme-subscription-hotfix" }
+  ]
+}

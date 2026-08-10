@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue *)",
+      "Bash(gh pr *)",
+      "Bash(go build *)",
+      "Bash(go mod *)",
+      "Bash(brain *)",
+      "Bash(~/.local/bin/brain *)",
+      "WebSearch"
+    ]
+  }
+}

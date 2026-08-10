@@ -1,0 +1,18 @@
+{
+  "id": "acme-crm",
+  "type": "project",
+  "title": "Acme / CRM feed integration",
+  "status": "active",
+  "updated": "2026-05-25",
+  "umbrella": "platform",
+  "context": "Acme + CRM dealer-feed integration: imports dealers and inventory from third-party feeds into api-core via worker-sync. End-to-end flow: feed CSV -> worker import (AcmeImportDealers) -> ProcessFeedQueueJob -> api-core DealerService -> dealer + inventory rows. Subscription-type correctness is the live concern (see hotfix task).",
+  "todo": [
+    { "id": "drain-race", "desc": "Proper fix for partial-drain race (inject subscription_type at FeedAdapter insert)", "status": "open" },
+    { "id": "audit-table", "desc": "Decide dedicated dealer_subscription_audit table vs log-only", "status": "open" }
+  ],
+  "tasks": ["acme-subscription-hotfix"],
+  "edges": [
+    { "rel": "part_of", "to": "platform" }
+  ],
+  "tags": ["feed", "dealers"]
+}

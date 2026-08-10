@@ -1,0 +1,349 @@
+{
+  "_comment": "EXAMPLE settings.json showing the full wosy hook wiring. NOT auto-deployed — install.sh only adds the watchdog matcher to your existing ~/.claude/settings.json. To use this as a starter: cp this file to ~/.claude/settings.json and replace every literal ${HOME} with your absolute home directory (e.g. sed -i.bak 's|\\${HOME}|'\"$HOME\"'|g' ~/.claude/settings.json). The other 14 hooks listed below must also exist at the referenced paths — copy them from claude/hooks/ first.",
+  "env": {
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "400000",
+    "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1",
+    "CLAUDE_CODE_SHELL": "/opt/homebrew/bin/bash",
+    "BASH_SILENCE_DEPRECATION_WARNING": "1"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "allow": [
+      "Bash(rg *)",
+      "Bash(fd)",
+      "Bash(fd *)",
+      "Bash(bat *)",
+      "Bash(eza)",
+      "Bash(eza *)",
+      "Bash(tree)",
+      "Bash(tree *)",
+      "Bash(ls)",
+      "Bash(ls *)",
+      "Bash(pwd)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(nl *)",
+      "Bash(file *)",
+      "Bash(stat *)",
+      "Bash(jq *)",
+      "Bash(glow *)",
+      "Bash(cut *)",
+      "Bash(tr *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(column *)",
+      "Bash(grep *)",
+      "Bash(cloc *)",
+      "Bash(difft *)",
+      "Bash(difftastic *)",
+      "Bash(which *)",
+      "Bash(type *)",
+      "Bash(command *)",
+      "Bash(whoami)",
+      "Bash(id)",
+      "Bash(id *)",
+      "Bash(date)",
+      "Bash(date *)",
+      "Bash(uptime)",
+      "Bash(uname)",
+      "Bash(uname *)",
+      "Bash(env)",
+      "Bash(/usr/bin/env)",
+      "Bash(printenv)",
+      "Bash(printenv *)",
+      "Bash(export)",
+      "Bash(echo)",
+      "Bash(echo *)",
+      "Bash(df)",
+      "Bash(df *)",
+      "Bash(du)",
+      "Bash(du *)",
+      "Bash(dust *)",
+      "Bash(ps)",
+      "Bash(ps *)",
+      "Bash(htop)",
+      "Bash(htop *)",
+      "Bash(bottom)",
+      "Bash(bottom *)",
+      "Bash(btm)",
+      "Bash(btm *)",
+      "Bash(direnv status)",
+      "Bash(direnv export *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git log)",
+      "Bash(git log *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git show)",
+      "Bash(git show *)",
+      "Bash(git branch)",
+      "Bash(git branch *)",
+      "Bash(git remote)",
+      "Bash(git remote *)",
+      "Bash(git config --get *)",
+      "Bash(git rev-parse *)",
+      "Bash(git ls-files)",
+      "Bash(git ls-files *)",
+      "Bash(git blame *)",
+      "Bash(git tag)",
+      "Bash(git tag -l)",
+      "Bash(git tag -l *)",
+      "Bash(git tag --list *)",
+      "Bash(git stash list)",
+      "Bash(git stash list *)",
+      "Bash(git describe)",
+      "Bash(git describe *)",
+      "Bash(git reflog)",
+      "Bash(git reflog *)",
+      "Bash(git fetch)",
+      "Bash(git fetch *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list)",
+      "Bash(gh issue list *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh repo view)",
+      "Bash(gh repo view *)",
+      "Bash(gh release view *)",
+      "Bash(gh release list)",
+      "Bash(gh release list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run list)",
+      "Bash(gh run list *)",
+      "Bash(gh workflow list)",
+      "Bash(gh workflow list *)",
+      "Bash(brew list)",
+      "Bash(brew list *)",
+      "Bash(brew info *)",
+      "Bash(brew search *)",
+      "Bash(brew config)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:support.claude.com)",
+      "WebFetch(domain:github.com)"
+    ],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(rmdir *)",
+      "Bash(mv *)",
+      "Bash(cp -f *)",
+      "Bash(cp -rf *)",
+      "Bash(dd *)",
+      "Bash(chmod *)",
+      "Bash(chown *)",
+      "Bash(sudo *)",
+      "Bash(kill *)",
+      "Bash(killall *)",
+      "Bash(pkill *)",
+      "Bash(git push *)",
+      "Bash(git reset --hard *)",
+      "Bash(git rebase *)",
+      "Bash(git rm *)",
+      "Bash(git clean *)",
+      "Bash(git checkout -- *)",
+      "Bash(git restore *)",
+      "Bash(git commit *)",
+      "Bash(git merge *)",
+      "Bash(git tag -d *)",
+      "Bash(git tag --delete *)",
+      "Bash(git push --tags *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh pr close *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr review *)",
+      "Bash(gh issue create *)",
+      "Bash(gh issue close *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh release create *)",
+      "Bash(gh release delete *)",
+      "Bash(gh release edit *)",
+      "Bash(gh workflow run *)",
+      "Bash(gh workflow disable *)",
+      "Bash(gh workflow enable *)",
+      "Bash(gh api -X POST *)",
+      "Bash(gh api -X PUT *)",
+      "Bash(gh api -X PATCH *)",
+      "Bash(gh api -X DELETE *)",
+      "Bash(brew install *)",
+      "Bash(brew uninstall *)",
+      "Bash(brew upgrade *)",
+      "Bash(brew remove *)",
+      "Bash(systemctl *)",
+      "Bash(launchctl *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/validate-bash.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/canonicalize-bash.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/secret-dump-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/write-location-warn.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/md-hardwrap-warn.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/watchdog.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/wosy-stop.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/handoff-vigilante.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/output-telemetry.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/edit-batch-nudge.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/context-checkpoint.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/handoff-check.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/context-checkpoint.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/session-audit.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/brain-reconcile.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/handoff-vigilante.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/multi-step-pause.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/brain-load-trigger.sh"
+          },
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/handoff-vigilante.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${HOME}/.claude/hooks/session-start-context.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "${HOME}/.claude/statusline/statusline.sh"
+  },
+  "outputStyle": "Coworker",
+  "effortLevel": "xhigh",
+  "autoUpdatesChannel": "stable",
+  "autoCompactEnabled": false,
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true
+}

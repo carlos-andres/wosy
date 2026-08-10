@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/task.schema.json",
+  "title": "task",
+  "$comment": "A bounded unit of work (e.g. PROJ-1409). Lives under a project, or standalone (project=null). Required fields ARE the KICKOFF gate (C.1): context · status · to-do · done_when · scope. entry_points powers the warm-context load (R5: working set <=8 reads). The pilot specimen (research/.../bench/canonical.json) is this type.",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "_base.schema.json#/$defs/record"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "task"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project": {
+      "$comment": "Parent project id, or null for a standalone task (lightweight tier).",
+      "anyOf": [
+        {
+          "$ref": "_base.schema.json#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "context": {
+      "$comment": "Triad: what this work is + the e2e flow / root-cause / rule / fix narrative.",
+      "type": "string",
+      "minLength": 1
+    },
+    "todo": {
+      "$comment": "Triad: the to-do list (subtasks + open items), each with its own status so open work is queryable.",
+      "type": "array",
+      "items": {
+        "$ref": "_base.schema.json#/$defs/todo_item"
+      },
+      "x-id-keyed": true
+    },
+    "scope": {
+      "$comment": "The scope contract the PLAN must cover whole (C.2) and the DONE-GATE checks (R7). in/out + the repos/files/feeds it touches.",
+      "type": "object",
+      "properties": {
+        "in_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "out_of_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "repos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "done_when": {
+      "$comment": "Falsifiable definition-of-done checklist (design/wire/docs included, not just code). The DONE-GATE blocks `wrap` until met (R7). >=1 item.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "entry_points": {
+      "$comment": "Files/symbols/anchors to load the working set from (SCOUT/REHYDRATOR target -> R5 <=8 reads, 0 re-reads).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verification": {
+      "$comment": "Optional preserved evidence the done_when was met (test counts, gate verdicts).",
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "status",
+    "updated",
+    "title",
+    "context",
+    "todo",
+    "scope",
+    "done_when"
+  ],
+  "additionalProperties": true
+}

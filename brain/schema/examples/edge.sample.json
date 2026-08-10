@@ -1,0 +1,7 @@
+{
+  "type": "edge",
+  "from": "acme-subscription-hotfix",
+  "rel": "produces",
+  "to": "acme-subscription-hotfix-plan",
+  "note": "join-table form of the same edge carried inline on the task record"
+}

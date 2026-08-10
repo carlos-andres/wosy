@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/project.schema.json",
+  "title": "project",
+  "$comment": "ONE canonical record per project (kills F1: acme was 59 fragments -> here it is 1). Carries the transversal triad: context+flow (load-once, stable) · status (operational, current) · to-do/backlog (operational). Tasks live as referenced child records; the graph lives in edges. Capability is referenced from the umbrella, never copied here.",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "_base.schema.json#/$defs/record"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "project"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "context": {
+      "$comment": "Triad: what it is + the end-to-end flow. The one place narrative is legitimate (load-once, stable).",
+      "type": "string",
+      "minLength": 1
+    },
+    "todo": {
+      "$comment": "Triad: open backlog items.",
+      "type": "array",
+      "items": {
+        "$ref": "_base.schema.json#/$defs/todo_item"
+      },
+      "x-id-keyed": true
+    },
+    "tasks": {
+      "$comment": "Child task records by id (one record per task; not inlined narrative).",
+      "type": "array",
+      "items": {
+        "$ref": "_base.schema.json#/$defs/id"
+      }
+    },
+    "umbrella": {
+      "$comment": "Parent umbrella id (umbrella-of-one for personal projects).",
+      "anyOf": [
+        {
+          "$ref": "_base.schema.json#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "status",
+    "updated",
+    "title",
+    "context",
+    "todo",
+    "tasks"
+  ],
+  "additionalProperties": true
+}

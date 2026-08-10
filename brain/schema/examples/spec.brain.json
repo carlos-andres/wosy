@@ -1,0 +1,21 @@
+{
+  "id": "devwork-kb-redesign",
+  "type": "spec",
+  "title": "The Brain — WOSY knowledge + workflow system",
+  "status": "active",
+  "updated": "2026-05-25",
+  "requirements": [
+    { "id": "R1", "text": "acme-crm resolves to 1 record, 0 internal contradictions", "status": "open" },
+    { "id": "R3", "text": "100% of records carry updated + status", "status": "active" },
+    { "id": "R10", "text": "WATCHDOG is the enforced reflex: inline query/ssh/KB-file-write routed through the sanctioned tool", "status": "open" },
+    { "id": "R11", "text": "KB-material writes render no diff in the main terminal; code/config/test edits render normally", "status": "open" }
+  ],
+  "done_when": [
+    "All 11 gates (R1-R11) pass on the pilot",
+    "Bench ratios reproduced on the acme-subscription-hotfix specimen"
+  ],
+  "edges": [
+    { "rel": "relates_to", "to": "acme-subscription-hotfix" }
+  ],
+  "tags": ["brain", "wosy", "master-spec"]
+}

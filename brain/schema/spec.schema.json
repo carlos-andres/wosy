@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/spec.schema.json",
+  "title": "spec",
+  "$comment": "A requirements/spec record (SRS-anchored projects track build vs this). Completeness is a property of THIS schema, not the prose: the SRS v1 was valid markdown and still incomplete -- required fields are what make 'complete' falsifiable.",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "_base.schema.json#/$defs/record"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "spec"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requirements": {
+      "$comment": "The requirements list, each addressable + checkable.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "$ref": "_base.schema.json#/$defs/state"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": true
+      },
+      "minItems": 1,
+      "x-id-keyed": true
+    },
+    "done_when": {
+      "$comment": "Spec-level acceptance criteria (falsifiable).",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "status",
+    "updated",
+    "title",
+    "requirements"
+  ],
+  "additionalProperties": true
+}

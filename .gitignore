@@ -1,0 +1,41 @@
+# Built artifacts
+brain/brain
+brain/cmd/brain/brain
+brain/cmd/toctou/toctou
+*.exe
+*.test
+*.out
+
+# Brain stores (data, never source)
+*.db
+*.sqlite
+*.sqlite3
+
+# Test stores + pilots (regenerable)
+brain/pilots/
+brain/stress-*/
+
+# Backup files
+*.bak
+*.bak.*
+*.bak-*
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor noise
+.vscode/
+.idea/
+*.swp
+*~
+
+# Internal session audits / process traces — local-only, never published
+audits/
+
+# Local-only settings (the example variant IS tracked)
+claude/settings.local.json
+
+# This repo IS the canonical source of CLAUDE.md — override ~/.gitignore_global
+# which excludes CLAUDE.md by default everywhere.
+!claude/CLAUDE.md
