@@ -1,0 +1,51 @@
+# {{plan.id}} — handoff ({{today}})
+
+**Plan status:** {{plan.status}}
+**Active task:** {{active_task.id}} ({{active_task.status}})
+**Ticket / branch:** {{plan.links.ticket}} · {{plan.links.branch}}
+
+## Where we are now
+
+{{plan.status_notes}}
+
+## Next concrete step
+
+{{next_step_from_active_task}}
+
+## Open questions
+
+{{#plan.open_questions.unresolved}}
+- {{question}}  ({{raised_by}})
+{{/plan.open_questions.unresolved}}
+
+## Files in play
+
+{{#plan.references}}
+- `{{path}}` — {{role}}
+{{/plan.references}}
+
+## Resume prompt (paste-ready)
+
+```
+I'm resuming plan {{plan.id}} in project {{project.slug}}.
+Read these IN ORDER before responding:
+1. {{plan_yml_path}}
+2. {{active_task_yml_path}}
+3. THIS handoff.md
+
+After reading, confirm in ONE sentence what the next concrete step is.
+Wait for "go".
+```
+
+<!--
+Rendering rules (owned by /handoff skill in Wave D, NOT a template engine):
+- {{plan.*}}              resolves against plan.yml
+- {{active_task.*}}       resolves against the most recently `updated` task.yml
+                          with status ∈ {pending, in-progress, blocked}
+- {{next_step_from_active_task}} = first stage with status != done's `done_when` (one sentence)
+- {{today}}               UTC date YYYY-MM-DD
+- {{project.slug}}        derived from the parent path <team>/projects/<slug>/
+- {{plan_yml_path}}       absolute path to plan.yml
+- {{active_task_yml_path}} absolute path to active task.yml
+- Empty sections (no open_questions, no references) render as _(none)_
+-->

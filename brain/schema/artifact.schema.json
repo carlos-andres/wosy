@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/artifact.schema.json",
+  "title": "artifact",
+  "$comment": "A preserved objective artifact: schema doc, query, connection spec, contract, plan, deploy doc, handoff. Not narrative about work — the durable thing the work produced or depends on. Referenced by tasks/projects via edges (produces/implements).",
+  "type": "object",
+  "allOf": [{ "$ref": "_base.schema.json#/$defs/record" }],
+  "properties": {
+    "type": { "const": "artifact" },
+    "title": { "type": "string", "minLength": 1 },
+    "kind": {
+      "$comment": "What sort of artifact, for routing/rendering.",
+      "type": "string",
+      "enum": ["schema", "query", "connection", "contract", "plan", "deploy", "handoff", "report", "other"]
+    },
+    "path": {
+      "$comment": "Where the artifact lives (repo-relative path or store ref).",
+      "type": "string"
+    },
+    "owner": {
+      "$comment": "The project/task/umbrella id this artifact belongs to.",
+      "$ref": "_base.schema.json#/$defs/id"
+    }
+  },
+  "required": ["id", "type", "status", "updated", "title", "kind"],
+  "additionalProperties": true
+}

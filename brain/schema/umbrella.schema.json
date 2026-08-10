@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/umbrella.schema.json",
+  "title": "umbrella",
+  "$comment": "The registry/TOC + capability owner. One per project-family (collapses to umbrella-of-one for pilot-a/PilotB). Single entry point: 'work on X' resolves here. Capability layer (connections/schema/query_library) is OWNED ONCE here and referenced by projects, never copied (kills per-project duplication).",
+  "type": "object",
+  "allOf": [{ "$ref": "_base.schema.json#/$defs/record" }],
+  "properties": {
+    "type": { "const": "umbrella" },
+    "title": { "type": "string", "minLength": 1 },
+    "projects": {
+      "$comment": "The registry/TOC: project ids onboarded under this umbrella. The single-entry-point resolves a name to one of these.",
+      "type": "array",
+      "items": { "$ref": "_base.schema.json#/$defs/id" }
+    },
+    "capability": {
+      "$comment": "References (paths/ids) to the capability layer owned here. Detected, not assumed (R8). Absent capability = N/A, not a gap.",
+      "type": "object",
+      "properties": {
+        "connections": { "type": ["string", "null"] },
+        "schema": { "type": ["string", "null"] },
+        "query_library": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["id", "type", "status", "updated", "title", "projects"],
+  "additionalProperties": true
+}

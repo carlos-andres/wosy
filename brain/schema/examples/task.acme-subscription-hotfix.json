@@ -1,0 +1,72 @@
+{
+  "id": "acme-subscription-hotfix",
+  "type": "task",
+  "title": "Acme Subscription-Type Hotfix",
+  "status": "review",
+  "status_detail": "implemented-local-validated; awaiting staging burn-in + prod deploy",
+  "created": "2026-04-30",
+  "updated": "2026-04-30",
+  "project": "acme-crm",
+  "ticket": "PROJ-1409",
+  "context": "ROOT CAUSE: Worker (worker-sync prod) never emits subscription_type on dealer CREATE/UPDATE; api-core dealer.subscription_type defaults to 'premium' on insert; DealerService::updateDealer has no cascade onto inventory; no audit log. Acme dealers with source Premium='No' are stored 'premium' and all inventory rows mirror the wrong value with no self-correction path. RULE: for dealer.from IN ('mainfeed','acme','crm'), dealer.subscription_type strictly governs every inventory.subscription_type row; source of truth for Acme = CSV 'Premium' column ('Yes'->premium else basic). FIX: worker always-emits subscription_type derived from Premium on CREATE+UPDATE; API validates (nullable|string|in:basic,premium) + writes gated on from allowlist + logs; cascade onto inventory is async (PRIMARY = end-of-batch hook in ProcessFeedQueueJob, SAFETY NET = daily sweeper), idempotent mass-UPDATE, ShouldBeUnique uniqueFor=900s, kill-switch FEED_SUBSCRIPTION_CASCADE_ENABLED. DESIGN ROUTE: synthesis of Route C (worker emit) + async cascade; watchdog/self-reschedule DROPPED in plan stage for end-of-batch hook + sweeper.",
+  "scope": {
+    "in_scope": ["acme feed (active)", "mainfeed (cascade-eligible, human-managed, untouched)"],
+    "out_of_scope": ["crm (cascade-eligible, no source signal)", "marketfeed", "external"],
+    "repos": [
+      { "name": "worker-sync", "branch": "production", "head": "4c57f6225ac5c3e2cc44cf52622a422f35cc40cb", "last_commit": "2026-04-20" },
+      { "name": "api-core", "branch": "production", "head": "7b8ad73b1d6c6f47a44999832027f654697ebd09", "last_commit": "2026-04-30" }
+    ],
+    "sample_drift": { "dealers": 9, "inventory_rows": 801 }
+  },
+  "done_when": [
+    "Preflight prod blast-radius query run for real and recorded in the deploy ticket",
+    "Staging burn-in observes a full cascade cycle over the Acme morning cron",
+    "Prod deploy completed worker-first then api-core, with post-deploy verification green",
+    "1407 wire-back tickets opened (8 items)"
+  ],
+  "entry_points": [
+    "worker-sync: app/.../AcmeImportDealers, ProcessFeedQueueJob, DealerSubscriptionCascadeJob, CascadeSubscriptionTypeSweepCommand",
+    "api-core: DealerService::updateDealer, CreateBulkDealerRequest, UpdateBulkDealerRequest, config/feeds.php, Kernel.php"
+  ],
+  "todo": [
+    { "id": "4.1", "desc": "worker AcmeImportDealers: emit subscription_type on CREATE+UPDATE", "status": "done" },
+    { "id": "4.2", "desc": "CreateBulkDealerRequest: add nullable|string|in:basic,premium rule", "status": "done" },
+    { "id": "4.3", "desc": "UpdateBulkDealerRequest: same rule", "status": "done" },
+    { "id": "4.4", "desc": "DealerService::updateDealer: write field gated on from + audit log", "status": "done" },
+    { "id": "4.5", "desc": "DealerSubscriptionCascadeJob (NEW): idempotent mass-UPDATE, ShouldBeUnique", "status": "done" },
+    { "id": "4.6", "desc": "CascadeSubscriptionTypeSweepCommand (NEW): daily drift sweeper", "status": "done" },
+    { "id": "4.7", "desc": "Kernel.php: schedule sweeper 11:00 + 15:00 UTC", "status": "done" },
+    { "id": "4.8", "desc": "config/feeds.php: subscription_cascade_enabled flag", "status": "done" },
+    { "id": "4.9", "desc": "ProcessFeedQueueJob: end-of-batch drain check + cascade dispatch (PRIMARY trigger)", "status": "done" },
+    { "id": "4.10", "desc": "Document partial-drain race (not fixed in hotfix)", "status": "done" },
+    { "id": "preflight", "desc": "Run prod blast-radius query, record in deploy ticket", "status": "open" },
+    { "id": "staging", "desc": "Staging burn-in: observe full cascade cycle over Acme morning cron", "status": "open" },
+    { "id": "prod-deploy", "desc": "Prod deploy + post-deploy verification", "status": "open" },
+    { "id": "wireback", "desc": "Open 1407 wire-back tickets (8 items)", "status": "open" }
+  ],
+  "verification": {
+    "cross_check_verdict": "CONFORMS-WITH-DRIFT (5 drifts, all improvements over plan)",
+    "quality_gate_verdict": "PASS-WITH-FIXES (eligibility list duplicated at 3 sites -> promoted to config)",
+    "phpunit_api": "18 tests / 48 assertions PASS",
+    "phpunit_worker": "11 tests / 11 assertions PASS",
+    "phpstan": "level 5, zero NEW errors both repos",
+    "simulator": "5/5 scenarios PASS",
+    "local_e2e": "5 experiments green"
+  },
+  "open_items": [
+    "Day-1 blast radius unmeasured on prod (preflight query not yet run for real)",
+    "Sweeper INNER-JOIN drift query performance unverified on full prod inventory table",
+    "correlation_id missing from dealer_subscription_changed log (minor)",
+    "feed_specifications per-dealer guardrail deferred (in consolidated scope, NOT plan scope)",
+    "CRM source-side detection out of scope (no Premium analogue)",
+    "DealerSubscriptionCascadeJob behavioral branch tests deferred to E2E"
+  ],
+  "edges": [
+    { "rel": "part_of", "to": "acme-crm" },
+    { "rel": "produces", "to": "acme-subscription-hotfix-plan" },
+    { "rel": "produces", "to": "acme-subscription-hotfix-deploy" },
+    { "rel": "decides", "to": "dec-route-c-plus-async-cascade" },
+    { "rel": "blocks", "to": "proj-1407-wireback" }
+  ],
+  "tags": ["hotfix", "acme", "subscription", "cascade"]
+}

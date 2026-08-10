@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/decision.schema.json",
+  "title": "decision",
+  "$comment": "An addressable decision record (ADR-like). FEEDBACK routes corrections here so no correction is lost in the transcript (C.4). Append-only history; supersede via an edge, never edit away.",
+  "type": "object",
+  "allOf": [{ "$ref": "_base.schema.json#/$defs/record" }],
+  "properties": {
+    "type": { "const": "decision" },
+    "title": { "type": "string", "minLength": 1 },
+    "context": {
+      "$comment": "The situation/forces that prompted the decision.",
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "$comment": "What was decided (the resolution).",
+      "type": "string",
+      "minLength": 1
+    },
+    "consequences": {
+      "$comment": "What follows / trade-offs accepted.",
+      "type": "string"
+    }
+  },
+  "required": ["id", "type", "status", "updated", "title", "context", "decision"],
+  "additionalProperties": true
+}

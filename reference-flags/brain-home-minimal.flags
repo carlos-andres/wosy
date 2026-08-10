@@ -1,0 +1,4 @@
+# wosy enforcement flags — brain-home dogfood (install-claude.sh)
+# Absent file = fail-open. Remove this file to disable enforcement here.
+wosy_enforce=1
+enforce_kb_scribe=1

@@ -1,0 +1,28 @@
+# Example platform-detected block (written by `./install.sh --only=platform-precheck --apply`).
+#
+# This shows what the precheck-layer writes to brain-home `~/Documents/.devwork/wosy.flags`
+# (or wherever $WOSY_DEVWORK points). It is APPENDED — your existing keys (wosy_enforce,
+# enforce_kb_scribe, enforce_inline_sql, db_engine, etc.) are preserved.
+#
+# Idempotent: re-running `--apply` strips the previous `# platform-detected` block and
+# re-writes it with fresh detection results. Hand-edits inside the block are clobbered.
+# Hand-edits OUTSIDE the block survive.
+#
+# Hooks that read these keys: wosy-stop.sh (stat_impl → newest_mtime branch), and the
+# 6 Library/Logs hooks (log_dir → log_dir_for branch). All 7 fail-open: if the lib is
+# missing, they keep prior macOS behavior. See claude/hooks/lib/detect-platform.sh.
+
+# platform-detected (managed by install.sh --only=platform-precheck --apply — do not hand-edit)
+platform=macos
+stat_impl=bsd
+log_dir=library
+bash_major=5
+tool_rg=1
+tool_fd=1
+tool_jq=1
+tool_eza=1
+tool_gh=1
+tool_httpie=0
+tool_direnv=1
+tool_rtk=1
+# end platform-detected

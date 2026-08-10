@@ -1,0 +1,13 @@
+{
+  "id": "acme-subscription-hotfix-plan",
+  "type": "artifact",
+  "title": "Acme Subscription-Type Hotfix — implementation plan",
+  "status": "done",
+  "updated": "2026-04-30",
+  "kind": "plan",
+  "path": "plans/acme-subscription-hotfix-plan.md",
+  "owner": "acme-subscription-hotfix",
+  "edges": [
+    { "rel": "relates_to", "to": "acme-subscription-hotfix" }
+  ]
+}

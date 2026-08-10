@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/_base.schema.json",
+  "title": "brain record base",
+  "$comment": "Shared vocabulary + the universal completeness law. Every record type allOf-refs $defs/record. Required fields here ARE the structural definition-of-done that satisfies R1 (one record per entity, has id+type), R3 (every record carries updated+status). Per-type schemas add the rest. additionalProperties is intentionally open: the brain is agnostic and additive, so domain fields (root_cause, fix, affected, ...) pass through. Completeness is enforced by `required`, never by forbidding extras.",
+  "$defs": {
+    "state": {
+      "$comment": "Controlled, queryable status vocabulary. Powers R2/R9 list/query (e.g. `list --where status=open`). Rich human nuance goes in status_detail.",
+      "type": "string",
+      "enum": ["open", "active", "blocked", "review", "done", "archived"]
+    },
+    "datestamp": {
+      "$comment": "Currency stamp (F3/R3). Absolute date, never relative.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "id": {
+      "$comment": "Stable unique key (F1/R1: one record per entity). kebab slug or ticket id; dots allowed for subtask ids (4.1).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "minLength": 2
+    },
+    "rel": {
+      "$comment": "Edge relation vocabulary (F2/R2: traversable graph). task->decision->issue->artifact chains.",
+      "type": "string",
+      "enum": ["depends_on", "blocks", "relates_to", "decides", "implements", "produces", "supersedes", "part_of"]
+    },
+    "edge_ref": {
+      "$comment": "Adjacency-in-record edge. The LINKER extracts these on write so links are never hand-typed. (Edge STORAGE — inline vs join table — is the P0/P1 open item; this fixes the SHAPE either way.)",
+      "type": "object",
+      "properties": {
+        "rel": { "$ref": "#/$defs/rel" },
+        "to": { "$ref": "#/$defs/id" },
+        "note": { "type": "string" }
+      },
+      "required": ["rel", "to"],
+      "additionalProperties": false
+    },
+    "type": {
+      "type": "string",
+      "enum": ["umbrella", "project", "task", "artifact", "decision", "spec", "edge"]
+    },
+    "todo_item": {
+      "$comment": "One operational to-do / backlog / subtask line. The triad's 'to-do'. Carries its own status so a list/query can filter open work (R9).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "desc": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/state" }
+      },
+      "required": ["desc", "status"],
+      "additionalProperties": true
+    },
+    "record": {
+      "$comment": "The universal completeness law. allOf-referenced by every non-edge record type.",
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "$ref": "#/$defs/type" },
+        "status": { "$ref": "#/$defs/state" },
+        "updated": { "$ref": "#/$defs/datestamp" },
+        "created": { "$ref": "#/$defs/datestamp" },
+        "title": { "type": "string", "minLength": 1 },
+        "status_detail": {
+          "$comment": "Free-text nuance behind the controlled status (e.g. 'awaiting staging burn-in + prod deploy').",
+          "type": "string"
+        },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "edges": {
+          "$comment": "Adjacency edges. Present (even if empty) makes every record edge-aware (R2).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/edge_ref" }
+        }
+      },
+      "required": ["id", "type", "status", "updated"]
+    }
+  }
+}

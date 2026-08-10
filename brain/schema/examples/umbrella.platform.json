@@ -1,0 +1,15 @@
+{
+  "id": "platform",
+  "type": "umbrella",
+  "title": "Platform (corporate)",
+  "status": "active",
+  "updated": "2026-05-25",
+  "projects": ["acme-crm"],
+  "capability": {
+    "connections": "capability/connections.md",
+    "schema": "capability/schema/",
+    "query_library": "capability/queries/library/"
+  },
+  "edges": [],
+  "tags": ["corporate", "umbrella"]
+}

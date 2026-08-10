@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.brain/schema/bundle.schema.json",
+  "title": "bundle",
+  "$comment": "The `brain load <project>` output: identity + 9 satellite sections assembled from the per-team brain.db (schema v3). Producer is loadProjectBundle in brain/internal/cli/cli_load_bundle.go — this schema describes exactly what it emits (optional keys are omitted when their column is NULL, never emitted as null). additionalProperties is false throughout because the assembler is the only producer.",
+  "type": "object",
+  "properties": {
+    "cache_version": {
+      "type": "string",
+      "$comment": "Empty string when the project row has no cache_version stamped yet."
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "project_id": { "type": "string" },
+        "slug": { "type": "string" },
+        "team": { "type": "string" },
+        "display_name": { "type": "string" },
+        "root_path": { "type": "string" },
+        "status": { "enum": ["active", "paused", "archived"] },
+        "created": { "type": "string" },
+        "updated": { "type": "string" }
+      },
+      "required": ["project_id", "slug", "team", "root_path", "status", "created", "updated"],
+      "additionalProperties": false
+    },
+    "pipeline_stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ord": { "type": "integer" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "status": { "enum": ["green", "yellow", "red"] },
+          "source_quote": {
+            "type": "string",
+            "$comment": "Verbatim prose sentence the stage was extracted from."
+          }
+        },
+        "required": ["ord", "name", "status"],
+        "additionalProperties": false
+      }
+    },
+    "scope": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": { "enum": ["file", "import", "external", "feed", "table"] },
+          "value": { "type": "string" },
+          "health": { "enum": ["green", "yellow", "red"] },
+          "last_seen": { "type": "string" },
+          "notes": { "type": "string" },
+          "promoted": {
+            "type": "boolean",
+            "$comment": "True when the entry was verified/promoted by a human session, not just extracted from prose."
+          }
+        },
+        "required": ["kind", "value", "health", "last_seen", "promoted"],
+        "additionalProperties": false
+      }
+    },
+    "connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "alias": { "type": "string" },
+          "kind": { "enum": ["mysql", "postgres", "sqlite", "redis", "ssh", "http", "path", "other"] },
+          "target": { "type": "string" },
+          "credential_ref": { "type": "string" },
+          "notes": { "type": "string" }
+        },
+        "required": ["alias", "kind", "target"],
+        "additionalProperties": false
+      }
+    },
+    "queries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "required": ["name", "path"],
+        "additionalProperties": false
+      }
+    },
+    "runbooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "kind": { "enum": ["incident", "procedure", "diagnostic", "recovery"] },
+          "purpose": {
+            "type": "string",
+            "$comment": "One-line 'when to reach for this' so the bundle is scannable without opening the file."
+          }
+        },
+        "required": ["name", "path", "kind"],
+        "additionalProperties": false
+      }
+    },
+    "encyclopedia_sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "heading": { "type": "string" },
+          "body_md": { "type": "string" },
+          "updated": { "type": "string" }
+        },
+        "required": ["heading", "body_md", "updated"],
+        "additionalProperties": false
+      }
+    },
+    "recent_tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "plan_id": { "type": "string" },
+          "task_id": { "type": "string" },
+          "status": { "enum": ["pending", "in-progress", "blocked", "done"] },
+          "updated": { "type": "string" }
+        },
+        "required": ["plan_id", "task_id", "status", "updated"],
+        "additionalProperties": false
+      }
+    },
+    "recent_commits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sha": { "type": "string" },
+          "message": { "type": "string" },
+          "files_changed_n": { "type": "integer" },
+          "ts": { "type": "string" }
+        },
+        "required": ["sha", "files_changed_n", "ts"],
+        "additionalProperties": false
+      }
+    },
+    "gotchas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": { "enum": ["info", "warn", "error"] },
+          "body_md": { "type": "string" },
+          "source_ref": { "type": "string" },
+          "created": { "type": "string" }
+        },
+        "required": ["severity", "body_md", "created"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "cache_version",
+    "identity",
+    "pipeline_stages",
+    "scope",
+    "connections",
+    "queries",
+    "runbooks",
+    "encyclopedia_sections",
+    "recent_tasks",
+    "recent_commits",
+    "gotchas"
+  ],
+  "additionalProperties": false
+}

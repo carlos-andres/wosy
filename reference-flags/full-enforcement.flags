@@ -1,0 +1,7 @@
+wosy_enforce=1
+enforce_inline_sql=1
+db_engine=pgsql
+enforce_kb_scribe=1
+enforce_bash_kb_writes=1
+enforce_destructive_kb=1
+expected_logical_sha=bf5a93f38fd588d7abe845629bcbc0a90c4eed4c

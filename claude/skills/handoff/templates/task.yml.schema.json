@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wosy.local/schemas/task.yml.schema.json",
+  "title": "Task",
+  "description": "One unit of work inside a plan. Modelo A: all 4 stages present in one file.",
+  "type": "object",
+  "required": ["id", "plan_id", "created", "status", "implement", "verify", "test", "maintain"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,63}$",
+      "description": "Task id, unique within its plan."
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+    },
+    "created": { "type": "string", "format": "date" },
+    "updated": { "type": "string", "format": "date" },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "in-progress", "blocked", "done"]
+    },
+    "blocked_by": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
+      "description": "Other task ids in the SAME plan that must be done first."
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "role": { "type": "string", "enum": ["target", "adjacent", "background"] }
+        }
+      }
+    },
+    "implement": { "$ref": "#/$defs/stage_implement" },
+    "verify":    { "$ref": "#/$defs/stage_verify" },
+    "test":      { "$ref": "#/$defs/stage_test" },
+    "maintain":  { "$ref": "#/$defs/stage_maintain" },
+    "history": {
+      "type": "array",
+      "description": "Append-only event log. See C-02 §2.4 for taxonomy.",
+      "items": {
+        "type": "object",
+        "required": ["ts", "actor", "event"],
+        "additionalProperties": false,
+        "properties": {
+          "ts":     { "type": "string", "format": "date-time" },
+          "actor":  { "type": "string", "enum": ["claude", "user", "hook"] },
+          "event":  { "type": "string", "enum": [
+            "created", "stage-started", "stage-done", "blocked", "unblocked",
+            "verify-failed", "test-failed", "completed"
+          ]},
+          "stage":  { "type": "string", "enum": ["implement", "verify", "test", "maintain"] },
+          "notes":  { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "stage_base": {
+      "type": "object",
+      "required": ["status", "done_when"],
+      "properties": {
+        "status":    { "type": "string", "enum": ["pending", "in-progress", "blocked", "done", "skipped"] },
+        "done_when": { "type": "string", "minLength": 5, "description": "Falsifiable criterion for stage close." },
+        "notes":     { "type": "string" }
+      }
+    },
+    "stage_implement": {
+      "allOf": [
+        { "$ref": "#/$defs/stage_base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": true, "done_when": true, "notes": true,
+            "approach":      { "type": "string", "description": "One paragraph — how the change will be made." },
+            "files_touched": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "stage_verify": {
+      "allOf": [
+        { "$ref": "#/$defs/stage_base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": true, "done_when": true, "notes": true,
+            "method":   { "type": "string", "enum": ["smoke", "manual", "agent-reviewer", "inspection"] },
+            "evidence": { "type": "string", "description": "Command output snippet OR agent summary OR file:line reference." }
+          }
+        }
+      ]
+    },
+    "stage_test": {
+      "allOf": [
+        { "$ref": "#/$defs/stage_base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": true, "done_when": true, "notes": true,
+            "framework":   { "type": "string", "description": "phpunit / pytest / go test / jest / none." },
+            "test_files":  { "type": "array", "items": { "type": "string" } },
+            "last_result": { "type": "string", "enum": ["pass", "fail", "skipped", "unrun"] }
+          }
+        }
+      ]
+    },
+    "stage_maintain": {
+      "allOf": [
+        { "$ref": "#/$defs/stage_base" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "status": true, "done_when": true, "notes": true,
+            "encyclopedia_delta": {
+              "type": "string",
+              "description": "Markdown snippet to merge into <team>/projects/<project>/encyclopedia.md via `brain reconcile`."
+            },
+            "runbook_delta": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "body"],
+              "properties": {
+                "name": { "type": "string", "description": "runbook filename without extension" },
+                "body": { "type": "string", "description": "markdown body" }
+              }
+            },
+            "gotchas": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["severity", "body"],
+                "additionalProperties": false,
+                "properties": {
+                  "severity": { "type": "string", "enum": ["info", "warn", "error"] },
+                  "body":     { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
