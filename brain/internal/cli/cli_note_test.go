@@ -29,7 +29,7 @@ func TestNote_InsertsGotcha_VisibleInLoadBundle(t *testing.T) {
 
 	var code int
 	out := captureStdout(t, func() {
-		code = Run([]string{"note", "acme-crm", "FTP host drops idle conns", "--store=" + dbPath})
+		code = Run([]string{"note", "acme-crm", "FTP host drops idle conns", "--source=flows/ftp.md:12", "--store=" + dbPath})
 	})
 	if code != 0 {
 		t.Fatalf("note exit=%d, want 0; out=%s", code, out)
@@ -41,8 +41,8 @@ func TestNote_InsertsGotcha_VisibleInLoadBundle(t *testing.T) {
 	if body != "FTP host drops idle conns" {
 		t.Errorf("body_md=%q", body)
 	}
-	if !strings.HasPrefix(sourceRef, "note:") {
-		t.Errorf("source_ref=%q, want note:<ts> prefix", sourceRef)
+	if sourceRef != "flows/ftp.md:12" {
+		t.Errorf("source_ref=%q, want the --source given", sourceRef)
 	}
 	if !strings.Contains(created, "T") || !strings.HasSuffix(created, "Z") {
 		t.Errorf("created not ISO 8601 UTC: %q", created)
@@ -62,7 +62,7 @@ func TestNote_InsertsGotcha_VisibleInLoadBundle(t *testing.T) {
 func TestNote_SeverityFlag(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "brain.db")
 	seedProject(t, dbPath, "px", "t").Close()
-	code := Run([]string{"note", "px", "host flaps", "--severity=warn", "--store=" + dbPath})
+	code := Run([]string{"note", "px", "host flaps", "--severity=warn", "--source=ticket:X-1", "--store=" + dbPath})
 	if code != 0 {
 		t.Fatalf("note exit=%d, want 0", code)
 	}
@@ -77,7 +77,7 @@ func TestNote_BadSeverity_Rejected(t *testing.T) {
 	seedProject(t, dbPath, "px", "t").Close()
 	var code int
 	msg := captureStderr(t, func() {
-		code = Run([]string{"note", "px", "text", "--severity=fatal", "--store=" + dbPath})
+		code = Run([]string{"note", "px", "text", "--severity=fatal", "--source=t", "--store=" + dbPath})
 	})
 	if code == 0 {
 		t.Fatalf("bad severity accepted; stderr=%q", msg)
@@ -93,7 +93,7 @@ func TestNote_FuzzyProjectResolves(t *testing.T) {
 	var code int
 	msg := captureStderr(t, func() {
 		_ = captureStdout(t, func() {
-			code = Run([]string{"note", "acme", "fuzzy landed", "--store=" + dbPath})
+			code = Run([]string{"note", "acme", "fuzzy landed", "--source=t", "--store=" + dbPath})
 		})
 	})
 	if code != 0 {
@@ -112,9 +112,69 @@ func TestNote_UnknownProject_Fails(t *testing.T) {
 	seedProject(t, dbPath, "px", "t").Close()
 	var code int
 	captureStderr(t, func() {
-		code = Run([]string{"note", "zzz-nope", "orphan", "--store=" + dbPath})
+		code = Run([]string{"note", "zzz-nope", "orphan", "--source=t", "--store=" + dbPath})
 	})
 	if code == 0 {
 		t.Fatalf("note on unknown project must fail")
+	}
+}
+
+// 2026-09-25: a note with no --source is refused. 43 of 44 pilot gotchas carried
+// source_ref = "note:"+created, so the verb was the cause of the void provenance.
+func TestNote_RequiresSource(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "brain.db")
+	seedProject(t, dbPath, "acme-crm", "platform").Close()
+	var code int
+	captureStderr(t, func() {
+		code = Run([]string{"note", "acme-crm", "no source here", "--store=" + dbPath})
+	})
+	if code == 0 {
+		t.Fatalf("note without --source exit=0, want non-zero")
+	}
+	s, _ := store.Open(dbPath)
+	defer s.Close()
+	var n int
+	s.DB.QueryRow(`SELECT count(*) FROM gotcha`).Scan(&n)
+	if n != 0 {
+		t.Errorf("gotcha rows=%d after refused note, want 0", n)
+	}
+}
+
+// srs F1: a planted credential in a candidate write is refused and the refusal
+// is shown. The control that must PASS is the same text with the secret removed.
+func TestNote_RefusesPlantedSecret(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "brain.db")
+	seedProject(t, dbPath, "acme-crm", "platform").Close()
+	planted := []string{
+		"ftp password=Tr0ub4dor&3 for the vendor host",
+		"use mysql://root:hunter22@db.internal/tc",
+		"key AKIAIOSFODNN7EXAMPLE leaked in log",
+		"pasted block: -----BEGIN RSA PRIVATE KEY----- MIIB",
+	}
+	for i, text := range planted {
+		var code int
+		errOut := captureStderr(t, func() {
+			code = Run([]string{"note", "acme-crm", text, "--source=t", "--store=" + dbPath})
+		})
+		if code == 0 {
+			t.Errorf("planted[%d] accepted, want refused", i)
+		}
+		if !strings.Contains(errOut, "refused") {
+			t.Errorf("planted[%d]: refusal not shown on stderr (len=%d)", i, len(errOut))
+		}
+	}
+	var code int
+	captureStdout(t, func() {
+		code = Run([]string{"note", "acme-crm", "password: rotated on 2026-09-25, see connections.md", "--source=connections.md", "--store=" + dbPath})
+	})
+	if code != 0 {
+		t.Fatalf("control: prose about a password refused, want accepted")
+	}
+	s, _ := store.Open(dbPath)
+	defer s.Close()
+	var n int
+	s.DB.QueryRow(`SELECT count(*) FROM gotcha`).Scan(&n)
+	if n != 1 {
+		t.Errorf("gotcha rows=%d, want exactly the control row", n)
 	}
 }
