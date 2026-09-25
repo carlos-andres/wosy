@@ -106,14 +106,10 @@ func storePath(p args) (string, bool) {
 // open is used by read-side and write-side commands. It refuses to lazy-create
 // a store when the path is the implicit fallback (no --store, no BRAIN_STORE).
 // Explicit paths still create on demand — preserves init/import/set behavior.
+// 2026-09-25: it now resolves through the same locator as load/query/note, so
+// report, reconcile, list and get follow the .devwork/wosy.yml hub pointer too.
 func open(p args) (*store.Store, error) {
-	path, explicit := storePath(p)
-	if !explicit {
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return nil, fmt.Errorf("BRAIN_STORE not set and no store at default %q — pass --store=<path> or set BRAIN_STORE env", path)
-		}
-	}
-	return store.Open(path)
+	return openResolved(p)
 }
 
 // parseInput tries JSON first (so arrays/objects/numbers/bools work), falling
@@ -220,7 +216,7 @@ Read / discover:
 Write (existing records use set, new records use import):
   import [-|<file>]                               Create record from JSON (stdin or file)
   set --<type>=<id> --section=<f> --input=<v>     Replace one section (record must exist)
-  note <project> "<text>" [--severity=info|warn|error]   Append a gotcha to a project (fuzzy slug ok)
+  note <project> "<text>" --source=<ref> [--severity=info|warn|error]   Append a gotcha; --source is where it came from (required)
 
   NOTE: array-section append is Fork-4-locked at the RMW pattern (Phase III-A4b
   killed ` + "`brain append`" + `). Read with ` + "`brain get --<type>=<id> --section=<f>`" + `,
@@ -241,7 +237,7 @@ Provisioning order (per-team store, from zero to warm session):
 Bootstrap / inspect:
   init [path]                                     Create empty store (default: .brain/store.db)
   init --team=<team>                              Create per-team brain.db at .devwork/<team>/brain.db + projects/ dir
-  promote --command=<sql>                         Capture inline SQL → query library (R9)
+  promote --command=<sql> [--project=<slug>]      Capture inline SQL → query library (R9); --project also writes the query_pointer row
 
 Gates (CI / pre-commit / hook integration):
   guard --tool=<t> --command=<c> --path=<p> --cwd=<d>   WATCHDOG test mode (exit 0=allow, 2=block)

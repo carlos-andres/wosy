@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const noteUsage = `usage: brain note <project> "<text>" [--severity=info|warn|error]`
+const noteUsage = `usage: brain note <project> "<text>" --source=<path|file:line|ticket|command> [--severity=info|warn|error]`
 
 // cmdNote appends a gotcha row to a project — the zero-ceremony capture path
 // for session findings ("FTP host drops idle conns") that would otherwise die
@@ -20,6 +20,16 @@ func cmdNote(p args) int {
 		return usageFail("note: need a project and a non-empty text\n%s", noteUsage)
 	}
 	projectArg, text := p.pos[0], p.pos[1]
+	// 2026-09-25: a source is required. 43 of 44 gotchas in the pilot store carried
+	// source_ref = "note:"+created, which records WHEN and never WHERE FROM. A
+	// conclusion with no source does not enter the store (gate 3 applied at write).
+	source := strings.TrimSpace(p.flag["source"])
+	if source == "" {
+		return usageFail("note: need --source=<path|file:line|ticket|command> — where this fact came from\n%s", noteUsage)
+	}
+	if c := secretClass(text + " " + source); c != "" {
+		return refuseSecret("note", c)
+	}
 	severity := p.flag["severity"]
 	if severity == "" {
 		severity = "info"
@@ -65,7 +75,7 @@ func cmdNote(p args) int {
 	if _, err := s.DB.Exec(
 		`INSERT INTO gotcha(project_id, severity, body_md, source_ref, created)
 		 VALUES(?, ?, ?, ?, ?)`,
-		id, severity, text, "note:"+now, now,
+		id, severity, text, source, now,
 	); err != nil {
 		return fail("note: insert: %v", err)
 	}
