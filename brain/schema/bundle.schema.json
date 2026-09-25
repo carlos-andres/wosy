@@ -119,34 +119,6 @@
         "additionalProperties": false
       }
     },
-    "recent_tasks": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "plan_id": { "type": "string" },
-          "task_id": { "type": "string" },
-          "status": { "enum": ["pending", "in-progress", "blocked", "done"] },
-          "updated": { "type": "string" }
-        },
-        "required": ["plan_id", "task_id", "status", "updated"],
-        "additionalProperties": false
-      }
-    },
-    "recent_commits": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "sha": { "type": "string" },
-          "message": { "type": "string" },
-          "files_changed_n": { "type": "integer" },
-          "ts": { "type": "string" }
-        },
-        "required": ["sha", "files_changed_n", "ts"],
-        "additionalProperties": false
-      }
-    },
     "gotchas": {
       "type": "array",
       "items": {
@@ -171,8 +143,6 @@
     "queries",
     "runbooks",
     "encyclopedia_sections",
-    "recent_tasks",
-    "recent_commits",
     "gotchas"
   ],
   "additionalProperties": false

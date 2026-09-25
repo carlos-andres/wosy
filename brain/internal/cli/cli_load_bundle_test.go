@@ -54,10 +54,6 @@ func TestLoadProjectBundle_HappyPath(t *testing.T) {
 		"acme-crm", "rb", "runbooks/rb.md", "recovery")
 	exec(`INSERT INTO encyclopedia_section(project_id,heading,body_md,updated) VALUES(?,?,?,?)`,
 		"acme-crm", "Section", "body", "2026-06-08T00:00:00Z")
-	exec(`INSERT INTO recent_task(project_id,plan_id,task_id,status,updated) VALUES(?,?,?,?,?)`,
-		"acme-crm", "plan-1", "task-A", "in-progress", "2026-06-08T00:00:00Z")
-	exec(`INSERT INTO recent_commit(project_id,sha,message,files_changed_n,ts) VALUES(?,?,?,?,?)`,
-		"acme-crm", "abc1234", "fix(x)", 2, "2026-06-08T00:00:00Z")
 	exec(`INSERT INTO gotcha(project_id,severity,body_md,source_ref,created) VALUES(?,?,?,?,?)`,
 		"acme-crm", "warn", "watch out", "file:1", "2026-06-08T00:00:00Z")
 
@@ -73,7 +69,7 @@ func TestLoadProjectBundle_HappyPath(t *testing.T) {
 	required := []string{
 		"cache_version", "identity", "pipeline_stages", "scope",
 		"connections", "queries", "runbooks", "encyclopedia_sections",
-		"recent_tasks", "recent_commits", "gotchas",
+		"gotchas",
 	}
 	for _, key := range required {
 		if _, ok := bundle[key]; !ok {
@@ -276,7 +272,7 @@ func TestLoadProjectBundle_EmptySatellites(t *testing.T) {
 	}
 	for _, section := range []string{
 		"pipeline_stages", "scope", "connections", "queries", "runbooks",
-		"encyclopedia_sections", "recent_tasks", "recent_commits", "gotchas",
+		"encyclopedia_sections", "gotchas",
 	} {
 		v, ok := bundle[section].([]map[string]any)
 		if !ok {

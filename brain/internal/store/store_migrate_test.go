@@ -278,7 +278,7 @@ func TestOpen_MigratesV2StoreToV3(t *testing.T) {
 		"project": 1, "pipeline_stage": 1, "scope_entry": 2,
 		"connection": 1, "runbook_pointer": 1,
 		"workspace": 1, "query_pointer": 1, "encyclopedia_section": 1,
-		"recent_task": 1, "recent_commit": 1, "gotcha": 1,
+		"gotcha": 1,
 	} {
 		if got := countRows(t, s.DB, table); got != want {
 			t.Errorf("%s rows = %d, want %d", table, got, want)
@@ -300,13 +300,16 @@ func TestOpen_MigratesV2StoreToV3(t *testing.T) {
 	if gotchaBody != "FTP host drops idle conns" {
 		t.Errorf("gotcha row mangled: body_md=%q", gotchaBody)
 	}
-	var taskStatus string
-	if err := s.DB.QueryRow(
-		`SELECT status FROM recent_task WHERE project_id='acme-crm' AND task_id='task-1'`).Scan(&taskStatus); err != nil {
-		t.Fatalf("recent_task row after migration: %v", err)
-	}
-	if taskStatus != "in-progress" {
-		t.Errorf("recent_task row mangled: status=%q", taskStatus)
+	// recent_task and recent_commit are retired (2026-09-25): the migration drops them.
+	for _, retired := range []string{"recent_task", "recent_commit"} {
+		var n int
+		if err := s.DB.QueryRow(
+			`SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?`, retired).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s still exists after migration, want dropped", retired)
+		}
 	}
 
 	// New columns exist.

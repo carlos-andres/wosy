@@ -205,7 +205,7 @@ usage: brain <command> [args] [--store=<path>]
 Read / discover:
   version                                         Binary version
   list [records|todos] [--where status=open]      Operational lists
-  load <id>                                       REHYDRATOR — project bundle (10 sections) OR legacy single-record warm
+  load <id>                                       REHYDRATOR — project bundle (8 sections) OR legacy single-record warm
                                                   (fuzzy project slug ok; resolution note goes to stderr)
   get --<type>=<id> [--section=<f>]               Read one section or whole record
   query "<SELECT ...>" [--json]                   Read-only SQL against the resolved store (single SELECT/PRAGMA only)

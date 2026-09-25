@@ -14,7 +14,7 @@ import (
 // load is the REHYDRATOR. Two paths since C-03 / Fork 2 lock 2026-06-08:
 //
 //  1. NEW (project bundle): if the id matches a row in the `project` table
-//     (id or slug), emit the 10-section JSON bundle defined in
+//     (id or slug), emit the 8-section JSON bundle defined in
 //     brain/schema/bundle.schema.json and return. Warm-caches a session in
 //     ONE call, replacing the prior ~39-call cold start at the project layer.
 //

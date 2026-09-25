@@ -14,7 +14,7 @@ import (
 // recent_task). Walks the project's plan/task tree and applies the C-02
 // Rule 3 wrap contract end-to-end:
 //
-//	(1) refresh `recent_task` rows from task.yml status (Phase I behavior)
+//	(1) recent_task refresh: RETIRED 2026-09-25 (logbook 161), git log computes it
 //	(2) for every task.yml whose maintain.status == "done", apply the
 //	    maintain-stage deltas:
 //	      - maintain.encyclopedia_delta  →  append to <project_root>/encyclopedia.md
@@ -77,13 +77,9 @@ func cmdReconcile(p args) int {
 	}
 	defer tx.Rollback()
 
-	// recent_task is files-canonical: truncate + rebuild from disk.
 	// gotcha rows are NOT truncated — they're additive (each one carries its
-	// source_ref); duplicate detection happens at insert time.
-	if _, err := tx.Exec(`DELETE FROM recent_task WHERE project_id=?`, projectID); err != nil {
-		return fail("reconcile: truncate recent_task: %v", err)
-	}
-
+	// source_ref); duplicate detection happens at insert time. recent_task was
+	// retired 2026-09-25 (logbook 161): git log computes it.
 	planEntries, err := os.ReadDir(plansDir)
 	if err != nil {
 		return fail("reconcile: read plans dir: %v", err)
@@ -91,7 +87,7 @@ func cmdReconcile(p args) int {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	var (
-		recentTaskUpserts   int
+		tasksSeen           int
 		encyclopediaApplied int
 		runbookApplied      int
 		gotchasInserted     int
@@ -119,23 +115,9 @@ func cmdReconcile(p args) int {
 			}
 			content := string(data)
 
-			// (1) recent_task refresh
-			status := extractTopLevelYAMLStatus(content)
-			if status == "" {
-				status = "pending"
-			}
-			if _, err := tx.Exec(
-				`INSERT INTO recent_task(project_id, plan_id, task_id, status, updated)
-				 VALUES(?, ?, ?, ?, ?)
-				 ON CONFLICT(project_id, plan_id, task_id) DO UPDATE SET
-				   status=excluded.status, updated=excluded.updated`,
-				projectID, planID, taskID, status, now,
-			); err != nil {
-				return fail("reconcile: upsert recent_task: %v", err)
-			}
-			recentTaskUpserts++
+			tasksSeen++
 
-			// (2) maintain-stage delta application — only when stage is done.
+			// maintain-stage delta application — only when stage is done.
 			ms := extractMaintainStage(content)
 			if ms.status != "done" {
 				continue
@@ -174,8 +156,8 @@ func cmdReconcile(p args) int {
 		return fail("reconcile: commit: %v", err)
 	}
 
-	fmt.Printf("reconcile %s: %d recent_task rows · %d encyclopedia deltas · %d runbooks · %d gotchas inserted\n",
-		projectID, recentTaskUpserts, encyclopediaApplied, runbookApplied, gotchasInserted)
+	fmt.Printf("reconcile %s: %d task.yml seen · %d encyclopedia deltas · %d runbooks · %d gotchas inserted\n",
+		projectID, tasksSeen, encyclopediaApplied, runbookApplied, gotchasInserted)
 	return 0
 }
 
@@ -258,37 +240,6 @@ func applyGotchas(tx *sql.Tx, projectID, sourceRef string, gotchas []gotchaEntry
 		n++
 	}
 	return n, nil
-}
-
-// extractTopLevelYAMLStatus is a deliberately tiny YAML peeker — it scans
-// for a top-level `status:` line and returns the value. Avoids pulling in a
-// full YAML parser for one field. Skips frontmatter delimiters and indented
-// `status:` lines (which belong to nested stage objects).
-//
-// Returns "" for: missing key, inline-comment-only value (`status: # foo`),
-// block-scalar indicators (`status: |`, `status: >`), and quoted-empty
-// values. Caller treats "" as `pending` (the schema default).
-func extractTopLevelYAMLStatus(content string) string {
-	for _, line := range strings.Split(content, "\n") {
-		if len(line) == 0 || line[0] == ' ' || line[0] == '\t' || line[0] == '-' || line[0] == '#' {
-			continue
-		}
-		if !strings.HasPrefix(line, "status:") {
-			continue
-		}
-		value := strings.TrimPrefix(line, "status:")
-		if hash := strings.Index(value, " #"); hash >= 0 {
-			value = value[:hash]
-		}
-		value = strings.TrimSpace(value)
-		value = strings.Trim(value, `"'`)
-		value = strings.TrimSpace(value)
-		if value == "" || value == "|" || value == ">" || value == "|-" || value == ">-" {
-			return ""
-		}
-		return value
-	}
-	return ""
 }
 
 // maintainStage is the subset of task.yml's maintain block that reconcile
