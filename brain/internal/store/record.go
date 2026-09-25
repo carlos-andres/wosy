@@ -65,16 +65,18 @@ func (s *Store) Put(rec map[string]any) error {
 		return fmt.Errorf("upsert record: %w", err)
 	}
 
-	// Rebuild edges from doc.edges (adjacency -> join table).
-	if _, err := tx.Exec(`DELETE FROM edge WHERE from_id=?`, id); err != nil {
-		return err
-	}
+	// Add edges from doc.edges (adjacency -> join table) under the estate's dialect:
+	// from_id is "<type>:<id>" for every type but project, which stays bare (decision
+	// 2026-09-25, logbook 160). Nothing is deleted here: the edge table also holds rows
+	// that appliers wrote and Put never saw, and a conclusion is superseded, never
+	// deleted (D-4). INSERT OR IGNORE keeps a re-import idempotent.
+	from := edgeFrom(str(rec, "type"), id)
 	if edges, ok := rec["edges"].([]any); ok {
 		for _, e := range edges {
 			em, _ := e.(map[string]any)
 			if _, err := tx.Exec(
 				`INSERT OR IGNORE INTO edge(from_id,rel,to_id,note) VALUES(?,?,?,?)`,
-				id, str(em, "rel"), str(em, "to"), nullable(str(em, "note")),
+				from, str(em, "rel"), str(em, "to"), nullable(str(em, "note")),
 			); err != nil {
 				return fmt.Errorf("insert edge: %w", err)
 			}
@@ -101,6 +103,15 @@ func (s *Store) Put(rec map[string]any) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// edgeFrom is the edge dialect of the estate: "task:<id>" for a task, bare for a
+// project (a world), and "<type>:<id>" for anything else.
+func edgeFrom(typ, id string) string {
+	if typ == "" || typ == "project" {
+		return id
+	}
+	return typ + ":" + id
 }
 
 // Get returns the full record by id.

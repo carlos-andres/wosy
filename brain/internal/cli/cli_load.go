@@ -163,7 +163,8 @@ func cmdLoad(p args) int {
 			ns, _ := s.Neighbors(id)
 			for _, n := range ns {
 				if n.Rel == "part_of" && n.Dir == "in" {
-					ids = append(ids, n.Other)
+					// edge dialect (logbook 160): a task edge is "task:<id>"; the record id is bare.
+					ids = append(ids, strings.TrimPrefix(n.Other, "task:"))
 				}
 			}
 		}
