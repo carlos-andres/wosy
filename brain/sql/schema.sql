@@ -143,35 +143,8 @@ CREATE TABLE IF NOT EXISTS encyclopedia_section (
   PRIMARY KEY (project_id, heading)
 );
 
--- ===========================================================================
--- RECENT TASKS — joined to plan.yml/task.yml on disk
--- ===========================================================================
-
-CREATE TABLE IF NOT EXISTS recent_task (
-  project_id  TEXT NOT NULL REFERENCES project(id) ON DELETE CASCADE,
-  plan_id     TEXT NOT NULL,
-  task_id     TEXT NOT NULL,
-  status      TEXT NOT NULL CHECK(status IN ('pending', 'in-progress', 'blocked', 'done')),
-  updated     TEXT NOT NULL,
-  PRIMARY KEY (project_id, plan_id, task_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_recent_task_updated ON recent_task(project_id, updated DESC);
-
--- ===========================================================================
--- RECENT COMMITS — git commits touching project scope
--- ===========================================================================
-
-CREATE TABLE IF NOT EXISTS recent_commit (
-  project_id      TEXT NOT NULL REFERENCES project(id) ON DELETE CASCADE,
-  sha             TEXT NOT NULL,
-  message         TEXT,
-  files_changed_n INTEGER NOT NULL,
-  ts              TEXT NOT NULL,
-  PRIMARY KEY (project_id, sha)
-);
-
-CREATE INDEX IF NOT EXISTS idx_recent_commit_ts ON recent_commit(project_id, ts DESC);
+-- recent_task and recent_commit were retired 2026-09-25 (brain-continuity-20260923,
+-- logbook 161): git log computes both. The v2->v3 migration drops them.
 
 -- ===========================================================================
 -- GOTCHAS — durable warnings surfaced into context

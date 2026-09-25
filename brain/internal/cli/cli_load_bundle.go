@@ -7,7 +7,7 @@ import (
 	"wosy.local/brain/internal/store"
 )
 
-// loadProjectBundle assembles the 10-section bundle defined in
+// loadProjectBundle assembles the 8-section bundle defined in
 // brain/schema/bundle.schema.json from the per-team brain.db (C-03 §2). If
 // `id` does not match a row in `project` (by id or slug), returns
 // (nil, false, nil) — caller falls through to legacy single-record load.
@@ -79,14 +79,6 @@ func loadProjectBundle(s *store.Store, id string) (map[string]any, bool, error) 
 	if err != nil {
 		return nil, true, err
 	}
-	tasks, err := loadRecentTasks(s, projectID)
-	if err != nil {
-		return nil, true, err
-	}
-	commits, err := loadRecentCommits(s, projectID)
-	if err != nil {
-		return nil, true, err
-	}
 	gotchas, err := loadGotchas(s, projectID)
 	if err != nil {
 		return nil, true, err
@@ -106,8 +98,6 @@ func loadProjectBundle(s *store.Store, id string) (map[string]any, bool, error) 
 		"queries":               queries,
 		"runbooks":              runbooks,
 		"encyclopedia_sections": sections,
-		"recent_tasks":          tasks,
-		"recent_commits":        commits,
 		"gotchas":               gotchas,
 	}, true, nil
 }
@@ -262,52 +252,6 @@ func loadEncyclopediaSections(s *store.Store, projectID string) ([]map[string]an
 			return nil, err
 		}
 		out = append(out, map[string]any{"heading": heading, "body_md": body, "updated": updated})
-	}
-	return out, rows.Err()
-}
-
-func loadRecentTasks(s *store.Store, projectID string) ([]map[string]any, error) {
-	rows, err := s.DB.Query(
-		`SELECT plan_id, task_id, status, updated FROM recent_task WHERE project_id=? ORDER BY updated DESC`,
-		projectID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("recent_task: %w", err)
-	}
-	defer rows.Close()
-	out := []map[string]any{}
-	for rows.Next() {
-		var planID, taskID, status, updated string
-		if err := rows.Scan(&planID, &taskID, &status, &updated); err != nil {
-			return nil, err
-		}
-		out = append(out, map[string]any{"plan_id": planID, "task_id": taskID, "status": status, "updated": updated})
-	}
-	return out, rows.Err()
-}
-
-func loadRecentCommits(s *store.Store, projectID string) ([]map[string]any, error) {
-	rows, err := s.DB.Query(
-		`SELECT sha, message, files_changed_n, ts FROM recent_commit WHERE project_id=? ORDER BY ts DESC`,
-		projectID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("recent_commit: %w", err)
-	}
-	defer rows.Close()
-	out := []map[string]any{}
-	for rows.Next() {
-		var sha, ts string
-		var msg sql.NullString
-		var nChanged int
-		if err := rows.Scan(&sha, &msg, &nChanged, &ts); err != nil {
-			return nil, err
-		}
-		row := map[string]any{"sha": sha, "files_changed_n": nChanged, "ts": ts}
-		if msg.Valid {
-			row["message"] = msg.String
-		}
-		out = append(out, row)
 	}
 	return out, rows.Err()
 }
