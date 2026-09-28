@@ -130,7 +130,7 @@ func fail(msg string, a ...any) int {
 // Run dispatches one command; returns the process exit code.
 func Run(argv []string) int {
 	if len(argv) == 0 {
-		return fail("usage: brain <version|init|import|get|set|list|load|note|query|build|reconcile|promote|project|report|schema|guard|help> ... (run `brain help` for full surface)")
+		return fail("usage: brain <version|init|import|get|set|list|load|pallet|note|query|build|reconcile|promote|project|report|schema|guard|help> ... (run `brain help` for full surface)")
 	}
 	cmd, rest := argv[0], argv[1:]
 	p := parse(rest)
@@ -177,6 +177,8 @@ func Run(argv []string) int {
 		return cmdNote(p)
 	case "query":
 		return cmdQuery(p)
+	case "pallet":
+		return cmdPallet(p)
 	case "build":
 		return cmdBuild(p)
 	case "project":
@@ -209,6 +211,9 @@ Read / discover:
                                                   (fuzzy project slug ok; resolution note goes to stderr)
   get --<type>=<id> [--section=<f>]               Read one section or whole record
   query "<SELECT ...>" [--json]                   Read-only SQL against the resolved store (single SELECT/PRAGMA only)
+  pallet <term> [--budget=N] [--logbook=<path>]   THE READ PROTOCOL — one JSON pallet for a term, gated by pallet-brief.schema.json:
+                                                  five layers, five fields, gaps named, built_from per row. Exit 1 unknown term,
+                                                  2 no logbook (srs C1), 3 over budget
   report --<type>=<id> [--format=md|html]         Render record to markdown/HTML
   schema [--type=<name>]                          List record types or dump JSON schema for one
   schema --tables                                 Print the live SQL DDL of the resolved store
