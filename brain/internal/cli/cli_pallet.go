@@ -315,9 +315,15 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 			c.gap("master: " + m + " names " + term + " 0 times")
 		}
 	}
+	// The hub is the .devwork that wosy.yml points at (C.13, 2026-09-29): the worlds sit at
+	// <hub>/projects/<w>, so the old three-levels-up walk from root_path lands on the umbrella.
+	// The walk stays as the fallback for estates without a pointer (the tests seed one).
 	hub := ""
-	if home != "" {
-		hub = filepath.Dir(filepath.Dir(filepath.Dir(worlds[home]))) // <umbrella>/.devwork
+	if wd, err := os.Getwd(); err == nil {
+		hub = findHubPointer(wd)
+	}
+	if hub == "" && home != "" {
+		hub = filepath.Dir(filepath.Dir(filepath.Dir(worlds[home]))) // pre-C.13 layout
 	}
 	var flows []string
 	if hub != "" {
@@ -378,7 +384,10 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 			}
 		}
 	}
-	rules := filepath.Join(hub, "integrations", "rules.md")
+	rules := filepath.Join(hub, "rules.md") // generated at the hub root since C.13
+	if _, err := os.Stat(rules); err != nil {
+		rules = filepath.Join(hub, "integrations", "rules.md") // pre-C.13 layout
+	}
 	rulesOK := false
 	if hub != "" {
 		if _, err := os.Stat(rules); err == nil {
