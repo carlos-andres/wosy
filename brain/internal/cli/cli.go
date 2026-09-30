@@ -130,7 +130,7 @@ func fail(msg string, a ...any) int {
 // Run dispatches one command; returns the process exit code.
 func Run(argv []string) int {
 	if len(argv) == 0 {
-		return fail("usage: brain <version|init|import|get|set|list|load|pallet|note|query|build|reconcile|promote|project|report|schema|guard|help> ... (run `brain help` for full surface)")
+		return fail("usage: brain <version|init|import|get|set|list|load|pallet|note|confirm|query|build|reconcile|promote|project|report|schema|guard|help> ... (run `brain help` for full surface)")
 	}
 	cmd, rest := argv[0], argv[1:]
 	p := parse(rest)
@@ -175,6 +175,8 @@ func Run(argv []string) int {
 		return cmdLoad(p)
 	case "note":
 		return cmdNote(p)
+	case "confirm":
+		return cmdConfirm(p)
 	case "query":
 		return cmdQuery(p)
 	case "pallet":
@@ -222,6 +224,7 @@ Write (existing records use set, new records use import):
   import [-|<file>]                               Create record from JSON (stdin or file)
   set --<type>=<id> --section=<f> --input=<v>     Replace one section (record must exist)
   note <project> "<text>" --source=<ref> [--severity=info|warn|error]   Append a gotcha; --source is where it came from (required)
+  confirm <gotcha|lesson>:<id> [--contradicted=<successor>]   Stamp last_verified_at (UTC now); --contradicted also sets superseded_by, which pallet and load skip
 
   NOTE: array-section append is Fork-4-locked at the RMW pattern (Phase III-A4b
   killed ` + "`brain append`" + `). Read with ` + "`brain get --<type>=<id> --section=<f>`" + `,

@@ -258,7 +258,7 @@ func loadEncyclopediaSections(s *store.Store, projectID string) ([]map[string]an
 
 func loadGotchas(s *store.Store, projectID string) ([]map[string]any, error) {
 	rows, err := s.DB.Query(
-		`SELECT severity, body_md, source_ref, created FROM gotcha WHERE project_id=?`,
+		`SELECT severity, body_md, source_ref, created FROM gotcha WHERE project_id=? AND superseded_by IS NULL`,
 		projectID,
 	)
 	if err != nil {

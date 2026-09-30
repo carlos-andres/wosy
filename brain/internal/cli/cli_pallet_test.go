@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"wosy.local/brain/internal/store"
 )
 
 // seedPalletEstate builds the smallest estate the pallet composes over: one
@@ -140,6 +142,41 @@ func TestPallet_ControlsThatMustFail(t *testing.T) {
 	}
 	if code, _ := runPallet(t, "--store="+dbPath); code == 0 {
 		t.Errorf("no term must fail usage")
+	}
+}
+
+// A superseded gotcha is not served, as a superseded lesson is not; the live
+// one that names the same term still is.
+func TestPallet_SkipsSupersededGotcha(t *testing.T) {
+	dbPath, logbook := seedPalletEstate(t)
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`INSERT INTO gotcha(project_id,severity,body_md,source_ref,created,superseded_by) VALUES ('acme-crm','error','goodrich sends no units','f:2','2026-09-23','gotcha:1')`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	code, out := runPallet(t, "goodrich", "--store="+dbPath, "--logbook="+logbook)
+	if code != 0 {
+		t.Fatalf("pallet exit=%d, want 0; out=%s", code, out)
+	}
+	var d map[string]any
+	if err := json.Unmarshal([]byte(out), &d); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out)
+	}
+	porque := d["brief"].(map[string]any)["porque"].(string)
+	if !strings.Contains(porque, "gotcha acme-crm#1 warn") {
+		t.Errorf("live gotcha not served: %s", porque)
+	}
+	if strings.Contains(porque, "#2") {
+		t.Errorf("superseded gotcha served: %s", porque)
+	}
+	for _, b := range d["built_from"].([]any) {
+		if src := b.(map[string]any)["source"]; src == "gotcha:2" {
+			t.Errorf("superseded gotcha in built_from")
+		}
 	}
 }
 
