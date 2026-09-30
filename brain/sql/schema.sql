@@ -156,7 +156,9 @@ CREATE TABLE IF NOT EXISTS gotcha (
   severity    TEXT NOT NULL CHECK(severity IN ('info', 'warn', 'error')),
   body_md     TEXT NOT NULL,
   source_ref  TEXT,
-  created     TEXT NOT NULL
+  created     TEXT NOT NULL,
+  last_verified_at TEXT,
+  superseded_by    TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_gotcha_severity ON gotcha(project_id, severity);

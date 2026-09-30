@@ -267,7 +267,7 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 	if home != "" {
 		conts = c.q("continent", "continent='{0}' AND world='{1}'", "SELECT continent, world, substr(note,1,70) FROM continent WHERE world=? ORDER BY 1", home)
 	}
-	gotcha := c.q("gotcha", "id={0}", "SELECT id, project_id, severity FROM gotcha WHERE lower(body_md) LIKE ? ORDER BY 1", c.like)
+	gotcha := c.q("gotcha", "id={0}", "SELECT id, project_id, severity FROM gotcha WHERE superseded_by IS NULL AND lower(body_md) LIKE ? ORDER BY 1", c.like)
 	lesson := c.q("lesson", "id='{0}' AND project_id='{1}'", "SELECT id, project_id, node_type, operating_rule, forbidden FROM lesson WHERE superseded_by IS NULL AND lower(id||coalesce(symptom_effect,'')||coalesce(mechanism,'')||coalesce(operating_rule,'')||coalesce(forbidden,'')) LIKE ? ORDER BY 1", c.like)
 	ruled := c.q("ruled_out", "id={0}", "SELECT id, project_id, claim, negative_evidence, origin_task FROM ruled_out WHERE lower(claim||negative_evidence) LIKE ? ORDER BY 1", c.like)
 	for _, nr := range []struct {

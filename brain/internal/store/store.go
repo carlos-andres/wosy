@@ -109,10 +109,17 @@ CREATE TABLE IF NOT EXISTS gotcha (
   severity    TEXT NOT NULL CHECK(severity IN ('info', 'warn', 'error')),
   body_md     TEXT NOT NULL,
   source_ref  TEXT,
-  created     TEXT NOT NULL
+  created     TEXT NOT NULL,
+  last_verified_at TEXT,
+  superseded_by    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_gotcha_severity ON gotcha(project_id, severity);
 `
+
+// gotchaAddedColumns joined gotcha after v3 shipped, the same pair lesson
+// carries. ADD COLUMN has no IF NOT EXISTS, so Init adds each one only when
+// pragma_table_info lacks it: a store that has them is left untouched.
+var gotchaAddedColumns = []string{"last_verified_at", "superseded_by"}
 
 const ddl = `
 PRAGMA journal_mode = WAL;
@@ -237,6 +244,18 @@ func (s *Store) Init() error {
 	}
 	if _, err := s.DB.Exec(ddlV3); err != nil {
 		return fmt.Errorf("apply schema (v3): %w", err)
+	}
+	for _, col := range gotchaAddedColumns {
+		var n int
+		if err := s.DB.QueryRow(
+			`SELECT COUNT(*) FROM pragma_table_info('gotcha') WHERE name=?`, col).Scan(&n); err != nil {
+			return fmt.Errorf("gotcha columns: %w", err)
+		}
+		if n == 0 {
+			if _, err := s.DB.Exec(`ALTER TABLE gotcha ADD COLUMN ` + col + ` TEXT`); err != nil {
+				return fmt.Errorf("add gotcha.%s: %w", col, err)
+			}
+		}
 	}
 	_, err := s.DB.Exec(
 		`INSERT INTO meta(key,value) VALUES('schema_version',?)

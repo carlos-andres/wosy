@@ -417,6 +417,66 @@ func TestOpen_V1LegacyStoreSkipsMigration(t *testing.T) {
 	}
 }
 
+// A v3 store written before gotcha carried last_verified_at and superseded_by
+// gains both on Open with its rows intact; a second Open leaves them untouched.
+func TestOpen_AddsGotchaVerificationColumnsOnce(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "brain.db")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open fresh: %v", err)
+	}
+	for _, q := range []string{
+		`INSERT INTO project(id,slug,team,root_path,created,updated,status)
+		 VALUES('p1','p1','t','/tmp/p1','2026-09-30T00:00:00Z','2026-09-30T00:00:00Z','active')`,
+		`INSERT INTO gotcha(project_id,severity,body_md,source_ref,created) VALUES('p1','warn','host flaps','f:1','2026-09-30T00:00:00Z')`,
+		`ALTER TABLE gotcha DROP COLUMN superseded_by`,
+		`ALTER TABLE gotcha DROP COLUMN last_verified_at`,
+	} {
+		if _, err := s.DB.Exec(q); err != nil {
+			t.Fatalf("seed pre-I.30 store: %s: %v", q, err)
+		}
+	}
+	s.Close()
+
+	s, err = Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open on store without the gotcha columns: %v", err)
+	}
+	for _, col := range []string{"last_verified_at", "superseded_by"} {
+		if !hasColumn(t, s.DB, "gotcha", col) {
+			t.Errorf("gotcha missing column %s after Open", col)
+		}
+	}
+	if got := countRows(t, s.DB, "gotcha"); got != 1 {
+		t.Errorf("gotcha rows = %d, want 1", got)
+	}
+	if _, err := s.DB.Exec(`UPDATE gotcha SET last_verified_at='2026-09-30T01:00:00Z', superseded_by='g2'`); err != nil {
+		t.Fatalf("stamp: %v", err)
+	}
+	s.Close()
+
+	s, err = Open(dbPath)
+	if err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	defer s.Close()
+	var cols int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('gotcha')`).Scan(&cols); err != nil {
+		t.Fatal(err)
+	}
+	if cols != 8 {
+		t.Errorf("gotcha columns = %d after second Open, want 8", cols)
+	}
+	var body, verified, successor string
+	if err := s.DB.QueryRow(`SELECT body_md, last_verified_at, superseded_by FROM gotcha`).Scan(&body, &verified, &successor); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if body != "host flaps" || verified != "2026-09-30T01:00:00Z" || successor != "g2" {
+		t.Errorf("second Open changed the row: body=%q last_verified_at=%q superseded_by=%q", body, verified, successor)
+	}
+}
+
 func TestOpen_FreshStoreIsV3WithoutBackup(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "brain.db")
