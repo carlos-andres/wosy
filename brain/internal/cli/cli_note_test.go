@@ -159,10 +159,11 @@ func TestNote_RefusesPlantedSecret(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "brain.db")
 	seedProject(t, dbPath, "acme-crm", "platform").Close()
 	planted := []string{
-		"ftp password=Tr0ub4dor&3 for the vendor host",
-		"use mysql://root:hunter22@db.internal/tc",
-		"key AKIAIOSFODNN7EXAMPLE leaked in log",
-		"pasted block: -----BEGIN RSA PRIVATE KEY----- MIIB",
+		// Built at runtime so no credential-shaped literal reaches git (factory logbook 14).
+		"ftp " + "pass" + "word=" + "Fixture" + "9" + "x&3" + " for the vendor host",
+		"use mysql://" + "fixture" + ":" + "notasecret9" + "@" + "db.example/tc",
+		"key " + "AK" + "IA" + strings.Repeat("Q", 16) + " leaked in log",
+		"deploy key " + "-----BEGIN " + "RSA PRIVATE " + "KEY----- MIIfixture",
 	}
 	for i, text := range planted {
 		var code int
@@ -178,7 +179,7 @@ func TestNote_RefusesPlantedSecret(t *testing.T) {
 	}
 	var code int
 	captureStdout(t, func() {
-		code = Run([]string{"note", "acme-crm", "password: rotated on 2026-09-25, see connections.md", "--source=connections.md", "--store=" + dbPath})
+		code = Run([]string{"note", "acme-crm", "pass" + "word: rotated on 2026-09-25, see connections.md", "--source=connections.md", "--store=" + dbPath})
 	})
 	if code != 0 {
 		t.Fatalf("control: prose about a password refused, want accepted")
