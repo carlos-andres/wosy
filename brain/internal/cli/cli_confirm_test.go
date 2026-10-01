@@ -21,8 +21,6 @@ func seedConfirm(t *testing.T) string {
 		`INSERT INTO project(id,slug,team,root_path,created,updated,status) VALUES('other','other','t','/tmp/other','2026-09-30','2026-09-30','active')`,
 		`INSERT INTO gotcha(project_id,severity,body_md,source_ref,created) VALUES('acme-crm','warn','FTP host drops idle conns','f:1','2026-09-30T00:00:00Z')`,
 		`INSERT INTO gotcha(project_id,severity,body_md,source_ref,created) VALUES('acme-crm','info','FTP host keeps conns','f:2','2026-09-30T00:00:00Z')`,
-		`CREATE TABLE lesson (id TEXT NOT NULL, project_id TEXT REFERENCES project(id), node_type TEXT NOT NULL,
-		   last_verified_at TEXT, superseded_by TEXT, created TEXT NOT NULL, source_ref TEXT NOT NULL, PRIMARY KEY (project_id, id))`,
 		`INSERT INTO lesson(id,project_id,node_type,created,source_ref) VALUES('L1','acme-crm','rule','2026-09-30','f:3')`,
 		`INSERT INTO lesson(id,project_id,node_type,created,source_ref) VALUES('L-ws',NULL,'rule','2026-09-30','f:4')`,
 		`INSERT INTO lesson(id,project_id,node_type,created,source_ref) VALUES('L-dup','acme-crm','rule','2026-09-30','f:5')`,

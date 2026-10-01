@@ -133,6 +133,15 @@ func Run(argv []string) int {
 		return fail("usage: brain <version|init|import|get|set|list|load|pallet|note|confirm|query|build|reconcile|promote|project|report|schema|guard|help> ... (run `brain help` for full surface)")
 	}
 	cmd, rest := argv[0], argv[1:]
+	// -h/--help anywhere after the verb prints usage and opens nothing. Before
+	// this, `note <p> -h` wrote a gotcha "-h" and `init -h` created a file "-h".
+	// A note whose whole text is "-h" can no longer be written; that is the cost.
+	for _, a := range rest {
+		if a == "-h" || a == "--help" {
+			fmt.Print(helpText)
+			return 0
+		}
+	}
 	p := parse(rest)
 
 	switch cmd {
@@ -254,11 +263,11 @@ Record types (for --<type>=<id> flags):
   umbrella · project · task · artifact · edge
 
 Environment:
-  BRAIN_STORE     Default store path. Flag --store=<path> wins. Fallback: ./.brain/store.db
-                  Read-side commands refuse implicit fallback when missing (R57).
-                  load/note/query/schema --tables additionally follow a satellite
-                  .devwork/wosy.yml ` + "`hub:`" + ` pointer (walking up from cwd) before
-                  the legacy fallback.
+  BRAIN_STORE     Store path. Resolution, every command but init: --store=<path>, then
+                  BRAIN_STORE, then the nearest .devwork/wosy.yml ` + "`hub:`" + ` walking up
+                  from cwd (<hub>/brain.db, else the one <hub>/*/brain.db), then
+                  ./.brain/store.db, which is refused when missing (R57).
+  -h, --help      Anywhere after a command: print this text, touch no store.
 
 For the full operator manual see ~/Documents/.devwork/WOSY.md (or the canonical
 repo at ~/Documents/GitHub/wosy/docs/WOSY.md).
@@ -288,6 +297,9 @@ func cmdImport(p args) int {
 	// + "error" keywords in the message so log-grep harnesses recognize it.
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return fail("import: no input — error: nothing to import. usage: brain import [-|<file>]; expects a JSON record on stdin or from a file")
+	}
+	if c := secretClass(string(data)); c != "" {
+		return refuseSecret("import", c)
 	}
 	var rec map[string]any
 	if err := json.Unmarshal(data, &rec); err != nil {
@@ -344,6 +356,9 @@ func cmdGet(p args) int {
 func cmdSet(p args) int {
 	if p.id == "" || p.section == "" || !p.hasInput {
 		return fail("set: need --<type>=<id> --section=<field> --input=<value>")
+	}
+	if c := secretClass(p.input); c != "" {
+		return refuseSecret("set", c)
 	}
 	s, err := open(p)
 	if err != nil {

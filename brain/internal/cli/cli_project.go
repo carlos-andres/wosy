@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -43,6 +44,9 @@ func cmdProjectRegister(p args) int {
 	case "active", "paused", "archived":
 	default:
 		return usageFail("project register: invalid --status %q (active|paused|archived)", status)
+	}
+	if c := secretClass(strings.Join([]string{id, team, root, p.flag["display-name"]}, "\n")); c != "" {
+		return refuseSecret("project register", c)
 	}
 	var displayName any
 	if dn := p.flag["display-name"]; dn != "" {
