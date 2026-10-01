@@ -231,9 +231,9 @@ func applyGotchas(tx *sql.Tx, projectID, sourceRef string, gotchas []gotchaEntry
 			continue
 		}
 		if _, err := tx.Exec(
-			`INSERT INTO gotcha(project_id, severity, body_md, source_ref, created)
-			 VALUES(?, ?, ?, ?, ?)`,
-			projectID, g.severity, g.body, sourceRef, now,
+			`INSERT INTO gotcha(project_id, severity, body_md, source_ref, created, last_verified_at)
+			 VALUES(?, ?, ?, ?, ?, ?)`,
+			projectID, g.severity, g.body, sourceRef, now, now,
 		); err != nil {
 			return n, err
 		}
