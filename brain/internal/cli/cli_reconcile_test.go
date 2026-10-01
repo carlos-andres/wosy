@@ -116,6 +116,16 @@ maintain:
 	if nGotcha != 2 {
 		t.Errorf("gotcha count = %d, want 2", nGotcha)
 	}
+	// A new row is dated from its source: last_verified_at = created, never NULL.
+	var nUndated int
+	if err := s2.DB.QueryRow(
+		`SELECT COUNT(1) FROM gotcha WHERE project_id='p3' AND (last_verified_at IS NULL OR last_verified_at <> created)`,
+	).Scan(&nUndated); err != nil {
+		t.Fatalf("undated count: %v", err)
+	}
+	if nUndated != 0 {
+		t.Errorf("%d reconciled gotchas without last_verified_at = created", nUndated)
+	}
 
 	// 4) Idempotency: re-run does not duplicate.
 	if code := cmdReconcile(p); code != 0 {

@@ -47,6 +47,19 @@ func TestNote_InsertsGotcha_VisibleInLoadBundle(t *testing.T) {
 	if !strings.Contains(created, "T") || !strings.HasSuffix(created, "Z") {
 		t.Errorf("created not ISO 8601 UTC: %q", created)
 	}
+	// A new note is dated from its source: last_verified_at = created, never NULL.
+	var verified *string
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store open: %v", err)
+	}
+	if err := s.DB.QueryRow(`SELECT last_verified_at FROM gotcha WHERE project_id='acme-crm'`).Scan(&verified); err != nil {
+		t.Fatalf("read last_verified_at: %v", err)
+	}
+	s.Close()
+	if verified == nil || *verified != created {
+		t.Errorf("last_verified_at=%v, want created %q", verified, created)
+	}
 
 	loadOut := captureStdout(t, func() {
 		code = Run([]string{"load", "acme-crm", "--store=" + dbPath})

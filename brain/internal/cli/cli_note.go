@@ -73,9 +73,9 @@ func cmdNote(p args) int {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := s.DB.Exec(
-		`INSERT INTO gotcha(project_id, severity, body_md, source_ref, created)
-		 VALUES(?, ?, ?, ?, ?)`,
-		id, severity, text, source, now,
+		`INSERT INTO gotcha(project_id, severity, body_md, source_ref, created, last_verified_at)
+		 VALUES(?, ?, ?, ?, ?, ?)`,
+		id, severity, text, source, now, now,
 	); err != nil {
 		return fail("note: insert: %v", err)
 	}
