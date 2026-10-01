@@ -17,7 +17,7 @@ var secretPatterns = []struct {
 	{"known_token_format", regexp.MustCompile(`\b(gh[pousr]_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}|sk-[A-Za-z0-9]{32,})\b`)},
 }
 
-// credential_assignment needs two conditions so that prose like "password: rotated"
+// credential_assignment needs two conditions so that prose like "password: <value>"
 // passes: a secret-looking key, and a value of 8+ chars that is not a plain word.
 var (
 	assignRe   = regexp.MustCompile(`(?i)\b(pass(word|wd)?|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)\b\s*[:=]\s*['"]?([^\s'"]{8,})`)
