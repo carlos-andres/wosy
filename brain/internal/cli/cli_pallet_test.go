@@ -41,8 +41,6 @@ func seedPalletEstate(t *testing.T) (string, string) {
 		}
 	}
 	exec(`UPDATE project SET root_path=? WHERE id='acme-crm'`, root)
-	exec(`CREATE TABLE synonym (term TEXT NOT NULL, canonical TEXT NOT NULL, source TEXT, PRIMARY KEY (term, canonical))`)
-	exec(`CREATE VIEW locate AS SELECT term, canonical FROM synonym UNION SELECT id, id FROM project`)
 	exec(`INSERT INTO synonym VALUES ('goodrich','dealer:600031705','test')`)
 	exec(`INSERT INTO record(id,type,status,updated,doc) VALUES ('goodrich-units','task','SIN DATOS','2026-09-23',?)`, `{"root":"`+filepath.Join(hub, "tasks", "goodrich-units")+`"}`)
 	exec(`INSERT INTO edge VALUES ('task:goodrich-units','about','dealer:600031705',NULL)`)
@@ -116,9 +114,10 @@ func TestPallet_ComposesGatedShape(t *testing.T) {
 			t.Errorf("built_from path missing: %s", bm["source"])
 		}
 	}
-	// the gaps name what the seed left out: lesson and ruled_out tables absent, no todo, no logbook under the task root
+	// the gaps name what the seed left out: no lesson or ruled_out row (the tables
+	// now come with every store, V1 2026-10-01), no todo, no logbook under the task root
 	gaps := strings.Join(toStrings(d["gaps"].([]any)), "\n")
-	for _, want := range []string{"lesson absent", "ruled_out absent", "0 open todo", "carry no logbook.jsonl", "SIN DATOS"} {
+	for _, want := range []string{"0 lesson rows name goodrich", "0 ruled_out rows name goodrich", "0 open todo", "carry no logbook.jsonl", "SIN DATOS"} {
 		if !strings.Contains(gaps, want) {
 			t.Errorf("gap %q not named; gaps=\n%s", want, gaps)
 		}

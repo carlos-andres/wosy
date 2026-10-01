@@ -71,6 +71,17 @@ func cmdReconcile(p args) int {
 		return 0
 	}
 
+	// srs F1: scan every task.yml before any write, so a refusal leaves both
+	// the store and the project files (encyclopedia, runbooks) untouched.
+	ymls, _ := filepath.Glob(filepath.Join(plansDir, "*", "tasks", "*", "task.yml"))
+	for _, y := range ymls {
+		if data, err := os.ReadFile(y); err == nil {
+			if c := secretClass(string(data)); c != "" {
+				return refuseSecret("reconcile "+y, c)
+			}
+		}
+	}
+
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return fail("reconcile: tx: %v", err)

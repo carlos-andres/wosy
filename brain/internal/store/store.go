@@ -7,6 +7,7 @@ package store
 
 import (
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"os"
 	"strconv"
@@ -16,6 +17,13 @@ import (
 )
 
 const SchemaVersion = 3
+
+// ddlMemory: lesson, ruled_out, synonym and the 10 read views, so `brain init`
+// recreates the live store's shape (before this they existed only in the live
+// file and in test fixtures).
+//
+//go:embed ddl_memory.sql
+var ddlMemory string
 
 // ddlV3: per-team brain.db gets the 10 project-rooted tables on TOP of the
 // legacy record/edge/todo/meta. Applied on every Open (CREATE TABLE IF NOT
@@ -244,6 +252,9 @@ func (s *Store) Init() error {
 	}
 	if _, err := s.DB.Exec(ddlV3); err != nil {
 		return fmt.Errorf("apply schema (v3): %w", err)
+	}
+	if _, err := s.DB.Exec(ddlMemory); err != nil {
+		return fmt.Errorf("apply schema (memory): %w", err)
 	}
 	for _, col := range gotchaAddedColumns {
 		var n int
