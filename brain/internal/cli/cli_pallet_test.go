@@ -52,6 +52,46 @@ func seedPalletEstate(t *testing.T) (string, string) {
 	return dbPath, logbook
 }
 
+// The pallet carries a reached world's runbooks and the schema cards of its scope tables, even when neither
+// names the term (factory logbook 98); a runbook of another world, or a top-level one that does not name the
+// term, stays out.
+func TestPallet_RunbooksAndWorldSchemas(t *testing.T) {
+	dbPath, logbook := seedPalletEstate(t)
+	hub := filepath.Dir(logbook)
+	for p, body := range map[string]string{
+		"runbooks/acme-crm/locate.md": "# Locate a dealer\n",
+		"runbooks/other-world/x.md":   "# goodrich elsewhere\n",
+		"runbooks/top.md":             "# top\n\ngoodrich steps.\n",
+		"runbooks/unrelated.md":       "# nothing here\n",
+		"schema/inventory.md":         "# inventory\n",
+	} {
+		os.MkdirAll(filepath.Join(hub, filepath.Dir(p)), 0o755)
+		os.WriteFile(filepath.Join(hub, p), []byte(body), 0o644)
+	}
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`INSERT INTO scope_entry(project_id,kind,value,health,last_seen,notes) VALUES ('acme-crm','table','inventory','green','2026-10-02','units')`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	code, out := runPallet(t, "goodrich", "--store="+dbPath, "--logbook="+logbook)
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	for _, want := range []string{"runbooks/acme-crm/locate.md", "runbooks/top.md", "schema/inventory.md", "1 schema files", "2 runbooks"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("pallet lacks %q", want)
+		}
+	}
+	for _, not := range []string{"runbooks/other-world/x.md", "runbooks/unrelated.md"} {
+		if strings.Contains(out, not) {
+			t.Errorf("pallet carries %q, which belongs to no reached world and does not name the term", not)
+		}
+	}
+}
+
 func runPallet(t *testing.T, argv ...string) (int, string) {
 	t.Helper()
 	var code int

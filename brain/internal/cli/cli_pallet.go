@@ -278,7 +278,17 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 			c.gap("wosy: 0 " + nr.n + " rows name " + term)
 		}
 	}
-	tables := c.q("scope_entry", "project_id='{0}' AND kind='table' AND value='{1}'", "SELECT project_id, value, notes FROM scope_entry WHERE kind='table' AND lower(value) LIKE ? ORDER BY 2", c.like)
+	// A world's tables are its scope_entry rows, not only the rows whose name contains the term (factory logbook 98):
+	// `a123-irv` names no table, so the LIKE alone left the world's schema cards out of its own pallet.
+	tableArgs := []any{c.like}
+	worldClause := ""
+	if len(wset) > 0 {
+		worldClause = " OR project_id IN (" + placeholders(len(wset)) + ")"
+		for _, w := range wset {
+			tableArgs = append(tableArgs, w)
+		}
+	}
+	tables := c.q("scope_entry", "project_id='{0}' AND kind='table' AND value='{1}'", "SELECT project_id, value, notes FROM scope_entry WHERE kind='table' AND (lower(value) LIKE ?"+worldClause+") ORDER BY 2, 1", tableArgs...)
 	if len(tables) == 0 {
 		c.gap("wosy: 0 scope_entry kind=table name " + term)
 	}
@@ -341,6 +351,34 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 	if len(flows) == 0 {
 		c.gap("flow: 0 files in " + filepath.Join(hub, "flows") + " name " + term)
 	}
+	// Runbooks (factory logbook 98): every runbook of a reached world, runbooks/<world>/*.md, plus a top-level
+	// runbooks/*.md that names the term. Same pointer rule as flows: the path, never the text.
+	var runbooks []string
+	if hub != "" {
+		seen := map[string]bool{}
+		for _, w := range wset {
+			rb, _ := filepath.Glob(filepath.Join(hub, "runbooks", w, "*.md"))
+			for _, f := range rb {
+				seen[f] = true
+			}
+		}
+		rb, _ := filepath.Glob(filepath.Join(hub, "runbooks", "*.md"))
+		for _, f := range rb {
+			if c.mentions(f) > 0 {
+				seen[f] = true
+			}
+		}
+		for f := range seen {
+			runbooks = append(runbooks, f)
+		}
+	}
+	sort.Strings(runbooks)
+	for _, f := range runbooks {
+		c.path(f)
+	}
+	if len(runbooks) == 0 {
+		c.gap("runbook: 0 files in " + filepath.Join(hub, "runbooks") + " for " + term)
+	}
 	var stages [][]any
 	if home != "" {
 		stages = c.q("pipeline_stage", "project_id='{0}' AND ord={1}", "SELECT project_id, ord, name, status FROM pipeline_stage WHERE project_id=? ORDER BY ord", home)
@@ -376,8 +414,13 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 	}
 	var schemas []string
 	if hub != "" {
+		seenSchema := map[string]bool{}
 		for _, t := range tables {
 			s := filepath.Join(hub, "schema", cell(t[1])+".md")
+			if seenSchema[s] {
+				continue // a table in several worlds keeps one card
+			}
+			seenSchema[s] = true
 			if _, err := os.Stat(s); err == nil {
 				schemas = append(schemas, s)
 				c.path(s)
@@ -538,6 +581,7 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 	sort.Strings(dl)
 	ref = append(ref, dl...)
 	ref = append(ref, flows...)
+	ref = append(ref, runbooks...)
 	ref = append(ref, schemas...)
 	if len(ref) == 0 {
 		ref = []string{c.store}
@@ -585,7 +629,7 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 		"built_from":   c.built,
 		"inputs": map[string]any{
 			"contexto":    fmt.Sprintf("Term `%s` in world %s, root %s, master mtime %s naming it %d times. Store shape %d tables, %d views.", term, home, worlds[home], hm.mtime, hm.n, nt, nv),
-			"materiales":  fmt.Sprintf("master.md of %s; %d flows naming the term; %d schema files; %d query pointers under %s; connection aliases %s; rules.md %s.", strings.Join(wset, ", "), len(flows), len(schemas), len(pointers), filepath.Join(hub, "queries", "library"), strings.Join(aliases, ", "), rulesText),
+			"materiales":  fmt.Sprintf("master.md of %s; %d flows naming the term; %d runbooks; %d schema files; %d query pointers under %s; connection aliases %s; rules.md %s.", strings.Join(wset, ", "), len(flows), len(runbooks), len(schemas), len(pointers), filepath.Join(hub, "queries", "library"), strings.Join(aliases, ", "), rulesText),
 			"rol":         fmt.Sprintf("Session on world %s. Store read-only. Production only through %s; the owner runs every mutation.", home, roText),
 			"alcance":     fmt.Sprintf("Composed for `%s` only, from the five layers (materiales, wosy, master, flow, pipeline), SELECT only, no detail inlined: the pallet is the pointer set and the .md holds the description.", term),
 			"referencias": ref,
