@@ -46,11 +46,17 @@ The store keeps **where things are and how they connect**: projects, tasks, edge
 |---|---|---|
 | the routes for a term (a project id or a synonym) | `brain pallet <term>` | one JSON pallet gated by `pallet-brief.schema.json`: a `brief` with five fields (`de_que_trata`, `en_que_nos_quedamos`, `para_que`, `porque`, `que_sigue`), the rows it used (`built_from`), and the gaps it found. Exit 1 unknown term, 2 no logbook, 3 over budget (`--budget=N`) |
 | one fact | `brain query "<SELECT>"` (add `--json` for JSON) | rows |
+| a library query, ready for the database client | `encuadre sql <query> NAME=value ...` (owner's home tool) | a self-contained `.sql` with its values inlined, for `mysqlp`; `q.sh` is retired |
 | one record or one section of it | `brain get --<type>=<id> [--section=<f>]`, e.g. `--task=<task-id>` | JSON; "record not found" for a project known only by `project register` |
 | a project bundle | `brain load <id>` | the warm-up bundle |
 | the live schema | `brain schema --tables` | DDL |
 
-**What a pallet holds.** A pallet holds pointers, not content. Its gotchas, lessons and ruled-out rows are the ones whose **text names the term**, not every row filed under the project. On 2026-10-02, `brain pallet a123-irv` returned 2 of the 195 live a123-irv gotchas. When the work needs a project's own rows, ask the store directly:
+**What a pallet holds.** A pallet holds pointers, not content. For the worlds it reaches, it lists:
+- the runbooks, `runbooks/<world>/*.md` plus any top-level runbook that names the term;
+- the schema cards of the world's scope tables;
+- the query pointers into the library.
+
+The world's runbooks and schema cards were added in commit e563f8d. Its gotchas, lessons and ruled-out rows are the ones whose **text names the term**, not every row filed under the project. On 2026-10-02, `brain pallet a123-irv` returned 2 of the 195 live a123-irv gotchas. When the work needs a project's own rows, ask the store directly:
 
 ```
 brain query "SELECT id, severity, body_md FROM gotcha WHERE project_id='<id>' AND superseded_by IS NULL"
