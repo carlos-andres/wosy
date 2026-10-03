@@ -270,11 +270,33 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 	gotcha := c.q("gotcha", "id={0}", "SELECT id, project_id, severity FROM gotcha WHERE superseded_by IS NULL AND lower(body_md) LIKE ? ORDER BY 1", c.like)
 	lesson := c.q("lesson", "id='{0}' AND project_id='{1}'", "SELECT id, project_id, node_type, operating_rule, forbidden FROM lesson WHERE superseded_by IS NULL AND lower(id||coalesce(symptom_effect,'')||coalesce(mechanism,'')||coalesce(operating_rule,'')||coalesce(forbidden,'')) LIKE ? ORDER BY 1", c.like)
 	ruled := c.q("ruled_out", "id={0}", "SELECT id, project_id, claim, negative_evidence, origin_task FROM ruled_out WHERE lower(claim||negative_evidence) LIKE ? ORDER BY 1", c.like)
+	// A world's own rows whose text does not say the term are pointed at, not rendered: a123-irv owns 159 gotchas
+	// and would break the budget, so the reader gets the counts and the query that lists them (pallet-world-rows-20261003).
+	own := map[string]int{}
+	var worldRows []string
+	for _, w := range wset {
+		var n [3]int
+		for i, t := range []struct {
+			table, live string
+			got         [][]any
+		}{{"gotcha", " AND superseded_by IS NULL", gotcha}, {"lesson", " AND superseded_by IS NULL", lesson}, {"ruled_out", "", ruled}} {
+			_ = c.db.QueryRow("SELECT count(*) FROM "+t.table+" WHERE project_id=?"+t.live, w).Scan(&n[i]) // a missing table counts 0
+			for _, r := range t.got {
+				if cell(r[1]) == w {
+					n[i]--
+				}
+			}
+			own[t.table] += n[i]
+		}
+		if n[0]+n[1]+n[2] > 0 {
+			worldRows = append(worldRows, fmt.Sprintf("world %s files %d gotcha, %d lesson, %d ruled_out that do not name %s: brain query \"SELECT 'gotcha', id FROM gotcha WHERE project_id='%s' AND superseded_by IS NULL UNION ALL SELECT 'lesson', id FROM lesson WHERE project_id='%s' AND superseded_by IS NULL UNION ALL SELECT 'ruled_out', id FROM ruled_out WHERE project_id='%s'\"", w, n[0], n[1], n[2], term, w, w, w))
+		}
+	}
 	for _, nr := range []struct {
 		n string
 		r [][]any
 	}{{"gotcha", gotcha}, {"lesson", lesson}, {"ruled_out", ruled}} {
-		if len(nr.r) == 0 {
+		if len(nr.r) == 0 && own[nr.n] == 0 {
 			c.gap("wosy: 0 " + nr.n + " rows name " + term)
 		}
 	}
@@ -508,6 +530,7 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 	for _, r := range ruled {
 		why = append(why, "ruled_out #"+cell(r[0])+": "+cut(cell(r[2]), 80))
 	}
+	why = append(why, worldRows...)
 	porque := X + "0 gotcha, 0 lesson, 0 ruled_out name " + term + "; the conclusions of its tasks live in their status.md and never reached the store (gate 2)."
 	if len(why) > 0 {
 		porque = strings.Join(why, "; ") + "."
