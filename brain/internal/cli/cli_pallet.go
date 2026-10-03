@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -52,14 +53,22 @@ func cmdPallet(p args) int {
 	cwd, _ := os.Getwd()
 	storePath, _, _ := resolveStore(p, cwd)
 
-	c := &palletComposer{db: db, store: storePath, term: term, like: "%" + strings.ToLower(strings.TrimRight(term, "s")) + "%"}
+	c := &palletComposer{db: db, store: storePath, term: term, like: "%" + strings.ToLower(strings.TrimRight(term, "s")) + "%", stmts: map[string]string{}}
 	doc, delivered, code := c.compose(consumer, budget, p.flag["logbook"])
 	if code != 0 {
 		return code
 	}
-	body, _ := json.MarshalIndent(doc, "", " ")
-	delivered[tokKey] = (len(body) + 3) / 4
-	body, _ = json.MarshalIndent(doc, "", " ")
+	// compact, one line: indentation was 8 percent of a pallet and no reader needs it. The store's directory is
+	// written once as $D and every path under it as $D/...: 57 copies of it were 14 percent of a123-irv's pallet.
+	// A reader expands $D/ before it opens a path or writes one into a document (pallet-compact-20261003).
+	root := filepath.Dir(storePath)
+	doc["path_vars"] = map[string]string{"$D": root}
+	encode := func() []byte {
+		b, _ := json.Marshal(doc)
+		return bytes.ReplaceAll(b, []byte(root+"/"), []byte("$D/"))
+	}
+	delivered[tokKey] = (len(encode()) + 3) / 4
+	body := encode()
 	if tok := (len(body) + 3) / 4; tok > budget {
 		fmt.Fprintf(os.Stderr, "[X] over budget: %d > %d\n", tok, budget)
 		return 3
@@ -76,14 +85,15 @@ type palletComposer struct {
 	store string
 	term  string
 	like  string
-	built []map[string]any
+	built []string
+	stmts map[string]string
 	gaps  []string
 	rows  int
 }
 
 // q runs one SELECT whose first n columns are the primary key of table, and
-// records every row in built_from with the statement that re-reads it (srs
-// A4, D2). A missing table is a named gap, not a failure: lesson, ruled_out
+// records every row in built_from as <table>:<key parts>, with its table's
+// statement template in statements (srs A4, D2). A missing table is a named gap, not a failure: lesson, ruled_out
 // and synonym come from v2 and the appliers, and store.Open does not create
 // them.
 func (c *palletComposer) q(table, pk string, sqlText string, params ...any) [][]any {
@@ -114,14 +124,15 @@ func (c *palletComposer) q(table, pk string, sqlText string, params ...any) [][]
 				vals[i] = string(b)
 			}
 		}
-		where := pk
 		var keyParts []string
 		for i := 0; i < n && i < len(vals); i++ {
-			s := fmt.Sprint(vals[i])
-			keyParts = append(keyParts, s)
-			where = strings.Replace(where, "{"+strconv.Itoa(i)+"}", strings.ReplaceAll(s, "'", "''"), 1)
+			keyParts = append(keyParts, fmt.Sprint(vals[i]))
 		}
-		c.built = append(c.built, map[string]any{"source": table + ":" + strings.Join(keyParts, "|"), "statement": "SELECT * FROM " + table + " WHERE " + where})
+		// one template per table, not one statement per row (pallet-compact-20261003): a reader fills {i}
+		// with the i-th "|" part of the source, quotes doubled. ponytail: a key value holding "|" is
+		// ambiguous, as the source already was; escape the parts if one ever does.
+		c.built = append(c.built, table+":"+strings.Join(keyParts, "|"))
+		c.stmts[table] = "SELECT * FROM " + table + " WHERE " + pk
 		c.rows++
 		out = append(out, vals)
 	}
@@ -131,7 +142,7 @@ func (c *palletComposer) q(table, pk string, sqlText string, params ...any) [][]
 func (c *palletComposer) gap(s string) { c.gaps = append(c.gaps, s) }
 
 func (c *palletComposer) path(p string) {
-	c.built = append(c.built, map[string]any{"source": p, "statement": nil})
+	c.built = append(c.built, p)
 }
 
 func cell(v any) string {
@@ -650,6 +661,7 @@ func (c *palletComposer) compose(consumer string, budget int, logbook string) (m
 		"delivered":    delivered,
 		"gaps":         c.gaps,
 		"built_from":   c.built,
+		"statements":   c.stmts,
 		"inputs": map[string]any{
 			"contexto":    fmt.Sprintf("Term `%s` in world %s, root %s, master mtime %s naming it %d times. Store shape %d tables, %d views.", term, home, worlds[home], hm.mtime, hm.n, nt, nv),
 			"materiales":  fmt.Sprintf("master.md of %s; %d flows naming the term; %d runbooks; %d schema files; %d query pointers under %s; connection aliases %s; rules.md %s.", strings.Join(wset, ", "), len(flows), len(runbooks), len(schemas), len(pointers), filepath.Join(hub, "queries", "library"), strings.Join(aliases, ", "), rulesText),
