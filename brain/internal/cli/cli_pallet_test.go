@@ -219,6 +219,47 @@ func TestPallet_SkipsSupersededGotcha(t *testing.T) {
 	}
 }
 
+// A world's own rows whose text does not say the world's name are pointed at, not
+// gapped and not rendered: one line with the counts and the query that lists them.
+func TestPallet_PointsAtWorldRowsTheTermDoesNotName(t *testing.T) {
+	dbPath, logbook := seedPalletEstate(t)
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO lesson(id,project_id,node_type,symptom_effect,created,source_ref) VALUES ('2026-10-03-verify-reads-fixtures','acme-crm','rule','verify reads frozen fixtures','2026-10-03','f:3')`,
+		`INSERT INTO ruled_out(project_id,claim,negative_evidence,scope,origin_task,date) VALUES ('acme-crm','the alert is a leak','planted fixtures','project','t','2026-10-03')`,
+	} {
+		if _, err := s.DB.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Close()
+
+	code, out := runPallet(t, "acme-crm", "--store="+dbPath, "--logbook="+logbook)
+	if code != 0 {
+		t.Fatalf("pallet exit=%d, want 0; out=%s", code, out)
+	}
+	var d map[string]any
+	if err := json.Unmarshal([]byte(out), &d); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out)
+	}
+	porque := d["brief"].(map[string]any)["porque"].(string)
+	if !strings.Contains(porque, "world acme-crm files 1 gotcha, 1 lesson, 1 ruled_out that do not name acme-crm") || !strings.Contains(porque, "project_id='acme-crm'") {
+		t.Errorf("no pointer to the world's rows: %s", porque)
+	}
+	if strings.Contains(porque, "verify reads frozen fixtures") {
+		t.Errorf("the pointer rendered a row: %s", porque)
+	}
+	gaps := strings.Join(toStrings(d["gaps"].([]any)), "\n")
+	for _, n := range []string{"gotcha", "lesson", "ruled_out"} {
+		if strings.Contains(gaps, "0 "+n+" rows name acme-crm") {
+			t.Errorf("false gap for %s; gaps=\n%s", n, gaps)
+		}
+	}
+}
+
 func openForTest(t *testing.T, dbPath string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
