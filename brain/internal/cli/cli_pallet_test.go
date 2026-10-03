@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -109,7 +110,10 @@ func TestPallet_ComposesGatedShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &d); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, out)
 	}
-	for _, k := range []string{"kind", "consumer", "project", "token_budget", "delivered", "gaps", "built_from", "inputs", "brief", "evidence", "verify", "receiver_verdict", "created", "source_ref"} {
+	if strings.Contains(strings.TrimSpace(out), "\n") {
+		t.Errorf("pallet is not one line of compact JSON")
+	}
+	for _, k := range []string{"kind", "consumer", "project", "token_budget", "delivered", "gaps", "built_from", "statements", "inputs", "brief", "evidence", "verify", "receiver_verdict", "created", "source_ref"} {
 		if _, ok := d[k]; !ok {
 			t.Errorf("missing required key %q", k)
 		}
@@ -133,10 +137,24 @@ func TestPallet_ComposesGatedShape(t *testing.T) {
 	if del["tokens"].(float64) <= 0 || del["tokens"].(float64) > float64(d["token_budget"].(float64)) {
 		t.Errorf("delivered.tokens out of range: %v of %v", del["tokens"], d["token_budget"])
 	}
-	// every built_from statement re-reads exactly one row, every path exists (srs D2)
+	// every built_from table source re-reads exactly one row through its table's
+	// template, every path exists (srs D2; pallet-compact-20261003)
+	tmpl := d["statements"].(map[string]any)
+	root, _ := d["path_vars"].(map[string]any)["$D"].(string)
+	if root == "" || strings.Contains(out, root+"/") {
+		t.Errorf("the store root is not written once as $D: path_vars=%v", d["path_vars"])
+	}
 	for _, b := range d["built_from"].([]any) {
-		bm := b.(map[string]any)
-		if st, ok := bm["statement"].(string); ok {
+		src := strings.Replace(b.(string), "$D/", root+"/", 1)
+		if table, keys, ok := strings.Cut(src, ":"); ok && !strings.HasPrefix(src, "/") {
+			st, _ := tmpl[table].(string)
+			if st == "" {
+				t.Errorf("no template for table %s", table)
+				continue
+			}
+			for i, k := range strings.Split(keys, "|") {
+				st = strings.Replace(st, "{"+strconv.Itoa(i)+"}", strings.ReplaceAll(k, "'", "''"), 1)
+			}
 			var n int
 			rows, err := openForTest(t, dbPath).Query(st)
 			if err != nil {
@@ -150,8 +168,8 @@ func TestPallet_ComposesGatedShape(t *testing.T) {
 			if n != 1 {
 				t.Errorf("statement returns %d rows, want 1: %s", n, st)
 			}
-		} else if _, err := os.Stat(bm["source"].(string)); err != nil {
-			t.Errorf("built_from path missing: %s", bm["source"])
+		} else if _, err := os.Stat(src); err != nil {
+			t.Errorf("built_from path missing: %s", src)
 		}
 	}
 	// the gaps name what the seed left out: no lesson or ruled_out row (the tables
@@ -213,7 +231,7 @@ func TestPallet_SkipsSupersededGotcha(t *testing.T) {
 		t.Errorf("superseded gotcha served: %s", porque)
 	}
 	for _, b := range d["built_from"].([]any) {
-		if src := b.(map[string]any)["source"]; src == "gotcha:2" {
+		if b == "gotcha:2" {
 			t.Errorf("superseded gotcha in built_from")
 		}
 	}
