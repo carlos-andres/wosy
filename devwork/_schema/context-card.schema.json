@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "context-card.schema.json",
+  "title": "devwork · the root context.md of an umbrella, the card every session loads at start. Frontmatter only.",
+  "description": "The JSON port of card/1 (context-card.schema.md on the umbrella), ruled by Calo 2026-09-29, logbook 196.2 and 200.1: schema, name, budget_lines and edit_rule drop; last_verified becomes updated; para, created and source_ref enter. kind picks the contract, role is one line of prose, para is the only human field (145). additionalProperties false: the old card fails on schema: alone (B.6 control).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "scope", "role", "root", "runtime", "boards", "branches", "gates", "read_only", "para", "created", "updated", "source_ref"],
+  "properties": {
+    "kind": {"const": "context-card"},
+    "scope": {"enum": ["workspace", "repo"]},
+    "role": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$", "description": "one line: what a session opened at this root is for"},
+    "root": {"type": "string", "pattern": "^/"},
+    "repos": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "description": "required when scope is workspace"},
+    "parent": {"type": "string", "pattern": "^/", "description": "required when scope is repo: the workspace card above"},
+    "runtime": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "minLength": 1}, "description": "label to absolute interpreter or toolchain path; the most re-derived fact class"},
+    "brain": {"type": "object", "additionalProperties": false, "required": ["store", "worlds"], "properties": {"store": {"type": "string", "pattern": "^/"}, "worlds": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"}}}},
+    "boards": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "branches": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$"},
+    "gates": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "read_only": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "para": {"type": "string", "minLength": 1, "description": "the bounded purpose, written by Calo, in Spanish"},
+    "created": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "updated": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "source_ref": {"type": "string", "minLength": 1},
+    "replaces": {"type": "string", "minLength": 1},
+    "isReplacedBy": {"type": ["string", "null"]}
+  },
+  "allOf": [
+    {"if": {"properties": {"scope": {"const": "workspace"}}, "required": ["scope"]}, "then": {"required": ["repos"]}},
+    {"if": {"properties": {"scope": {"const": "repo"}}, "required": ["scope"]}, "then": {"required": ["parent"]}}
+  ]
+}

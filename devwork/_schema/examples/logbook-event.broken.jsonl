@@ -1,0 +1,1 @@
+{"id":"broken-001","ts":"2026-09-24T16:01:11Z","project":"collectors","task_id":null,"type":"delivery","text":"A delivery event with no delivery object. The 0-hit counter cannot count what does not declare whether it was a hit, so stats would read loads without 0-hits and report success by omission.","pointer":{"kind":"command","value":"brain load collectors"}}

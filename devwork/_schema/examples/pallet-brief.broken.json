@@ -1,0 +1,34 @@
+{
+  "kind": "pallet-brief",
+  "consumer": "subagent",
+  "project": "feed-alpha",
+  "task_id": null,
+  "token_budget": 4000,
+  "delivered": { "tokens": 312, "rows": 2 },
+  "gaps": ["conclusions"],
+  "built_from": [
+    { "source": "gotcha:17", "statement": "SELECT body_md, severity, created FROM gotcha WHERE id = 17" },
+    { "source": "scope_entry:88", "statement": "SELECT value, kind, last_seen FROM scope_entry WHERE rowid = 88" }
+  ],
+  "inputs": {
+    "contexto": "Find why the feedco image batch silently skips rows.",
+    "materiales": "The api-service room.",
+    "rol": "Scout.",
+    "alcance": "Read only.",
+    "referencias": ["/Users/you/work/umbrella/api-service"]
+  },
+  "brief": {
+    "de_que_trata": "The feedco image batch skip.",
+    "porque": "Rows vanish with no error.",
+    "para_que": "Name the gate that drops them.",
+    "en_que_nos_quedamos": "The symptom is reproduced.",
+    "que_sigue": "Locate the gate."
+  },
+  "evidence": [
+    { "claim": "The symptom is reproduced.", "logbook_id": "20260924T160111Z-001" }
+  ],
+  "verify": { "cmd": "brain load feed-alpha", "expect": "10 sections" },
+  "receiver_verdict": null,
+  "created": "2026-09-24",
+  "source_ref": "_schema/examples/pallet-brief.broken.json"
+}

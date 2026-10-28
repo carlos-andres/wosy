@@ -1,0 +1,381 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pallet-brief.schema.json",
+  "title": "devwork · the pallet/brief contract. One composed projection, three consumers: fresh session, mid-session gap, dispatched subagent.",
+  "description": "Calo's five output fields and five inputs are verbatim and are not open to redesign (bitacora.md section 4.3, context.md 4c item 11). Everything else here is a requirement from srs.md groups A, C and D expressed as a field, so a checker can refuse a brief instead of a human remembering to write one.",
+  "type": "object",
+  "required": [
+    "kind",
+    "consumer",
+    "project",
+    "token_budget",
+    "delivered",
+    "gaps",
+    "built_from",
+    "inputs",
+    "brief",
+    "evidence",
+    "verify",
+    "receiver_verdict",
+    "created",
+    "source_ref",
+    "statements",
+    "path_vars"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "pallet-brief"
+    },
+    "consumer": {
+      "enum": [
+        "fresh-session",
+        "mid-session-gap",
+        "subagent"
+      ],
+      "description": "context.md section 4, decision 3: the same operation serves all three. The consumer changes what is required, never how it is built."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "token_budget": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "srs.md A4. The projection is bounded and the bound is stated here. An unstated budget cannot be exceeded, so it cannot be tested."
+    },
+    "delivered": {
+      "type": "object",
+      "required": [
+        "tokens"
+      ],
+      "additionalProperties": false,
+      "description": "Step 1e, decision-delivery-briefs-20260924.md: the measured actual beside the stated bound. second-brain v2 states the delivered size in the artefact and wosy states nothing and returns everything. The test a checker runs is delivered.tokens <= token_budget; JSON Schema cannot compare two instance values, so the checker owns that comparison and this field owns its existence. Without it the bound cannot be exceeded, so it cannot be tested.",
+      "properties": {
+        "tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "the measured token weight of this brief, the unit token_budget is stated in. Measured, never estimated from a different date: brain load feed-alpha is 57,338 bytes and about 14.3k tokens, 1.7 times the master.md it derives from (bitacora.md section 2.5)."
+        },
+        "rows": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "rows this brief delivered, the number v2 emits as rows_delivered: 235 for the feed-alpha apertura. 0 is a real value and means every block came back empty, which gaps then names. null when the brief drew from no queryable source."
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Step 1e: the blocks this brief could not fill, empty when nothing is missing. v2 emits gaps: [\"infra\"]. Required and possibly empty rather than optional, because without it a brief that delivered nothing looks identical to one that delivered everything. This is the 0-hit measured per block at delivery time, not inferred afterwards from a session that went wrong — logbook-event.schema.json puts delivery.hit at the whole-delivery level and this puts it per block. Each entry names a built_from source or a block name.",
+      "default": []
+    },
+    "built_from": {
+      "type": "array",
+      "minItems": 1,
+      "description": "srs.md A4 and D2: name every source this pallet included, as a string: <table>:<key parts joined by |>, or a path under a path_vars variable ($D/...) or absolute. A table source re-reads its one row through statements[<table>] with {i} filled by the i-th key part, quotes doubled; a path is opened. pallet-compact-20261003 (2026-10-03) replaced the per-row {source, statement} objects: 69 statements in feed-alpha were 8 templates.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "required": [
+        "contexto",
+        "materiales",
+        "rol",
+        "alcance",
+        "referencias"
+      ],
+      "additionalProperties": false,
+      "description": "Calo, verbatim: el contexto real de la tarea, los materiales y assets, el rol, el alcance, las referencias.",
+      "properties": {
+        "contexto": {
+          "type": "string",
+          "minLength": 1,
+          "description": "el contexto real de la tarea"
+        },
+        "materiales": {
+          "type": "string",
+          "minLength": 1,
+          "description": "los materiales y assets"
+        },
+        "rol": {
+          "type": "string",
+          "minLength": 1,
+          "description": "el rol"
+        },
+        "alcance": {
+          "type": "string",
+          "minLength": 1,
+          "description": "el alcance"
+        },
+        "referencias": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "las referencias. Absolute paths, pointers, never inlined content."
+        }
+      }
+    },
+    "brief": {
+      "type": "object",
+      "required": [
+        "de_que_trata",
+        "porque",
+        "para_que",
+        "en_que_nos_quedamos",
+        "que_sigue"
+      ],
+      "additionalProperties": false,
+      "description": "Calo, verbatim: me vas a decir de que trata el trabajo / porque / para que / en que nos quedamos / que sigue. Five fields, no more and no fewer.",
+      "properties": {
+        "de_que_trata": {
+          "type": "string",
+          "minLength": 1,
+          "description": "de qué trata el trabajo"
+        },
+        "porque": {
+          "type": "string",
+          "minLength": 1,
+          "description": "porqué"
+        },
+        "para_que": {
+          "type": "string",
+          "minLength": 1,
+          "description": "para qué"
+        },
+        "en_que_nos_quedamos": {
+          "type": "string",
+          "minLength": 1,
+          "description": "en qué nos quedamos. This is the state field, so every claim inside it appears in evidence."
+        },
+        "que_sigue": {
+          "type": "string",
+          "minLength": 1,
+          "description": "qué sigue"
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "description": "srs.md C1: assembled, never composed. Every state claim carries the logbook line it came from, and an unresolvable id fails the build.",
+      "items": {
+        "type": "object",
+        "required": [
+          "claim",
+          "logbook_id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "type": "string",
+            "minLength": 1
+          },
+          "logbook_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "an id from logbook-event.schema.json"
+          }
+        }
+      }
+    },
+    "verify": {
+      "type": "object",
+      "required": [
+        "cmd",
+        "expect"
+      ],
+      "additionalProperties": false,
+      "description": "srs.md C3. The receiver runs this before the first productive action. Same two keys as kickoff.schema.json, deliberately.",
+      "properties": {
+        "cmd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expect": {
+          "type": "string",
+          "minLength": 1,
+          "description": "exact expected output"
+        }
+      }
+    },
+    "receiver_verdict": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "confirmed",
+        "at"
+      ],
+      "additionalProperties": false,
+      "description": "srs.md C3 and context.md section 4, decision 5: a handover completes on the receiver's confirmation, not on delivery. Required and nullable rather than optional, because optional is how 873 handoffs produced 1 countersignature. null means not yet confirmed.",
+      "properties": {
+        "confirmed": {
+          "type": "boolean"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "on a false verdict, what did not match. srs.md C4 then requires a correction event whose pointer is this brief."
+        }
+      }
+    },
+    "destination": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "srs.md D1 slot 1: the bounded goal. Required for consumer subagent."
+    },
+    "route": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "srs.md D1 slot 2: where to look. Required for consumer subagent."
+    },
+    "forbidden": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "srs.md D1 slot 3 and A5: the forbidden zones, drawn from the store's negative knowledge. Required and non-empty for consumer subagent, because reach without negative knowledge does not help a blind agent (srs.md D0).",
+      "items": {
+        "type": "object",
+        "required": [
+          "zone",
+          "negative_evidence"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "zone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "negative_evidence": {
+            "type": "string",
+            "minLength": 1,
+            "description": "why it is ruled out. A zone with no evidence gets re-walked."
+          },
+          "source_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "return_contract": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "srs.md D1 slot 4: the output shape, with file:line. Required for consumer subagent."
+    },
+    "created": {
+      "type": "string",
+      "format": "date"
+    },
+    "updated": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "statements": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "One SELECT template per table named in built_from, with {0}, {1} ... for the key parts of the source (pallet-compact-20261003).",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^SELECT \\* FROM \\w+ WHERE .*\\{0\\}"
+      }
+    },
+    "path_vars": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Each variable and the absolute directory it stands for; every path under it is written as <var>/... A reader expands <var>/ before it opens a path or writes it into a document, so documents keep absolute paths (pallet-compact-20261003).",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^/"
+      },
+      "propertyNames": {
+        "pattern": "^\\$[A-Z]+$"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "consumer"
+        ],
+        "properties": {
+          "consumer": {
+            "const": "subagent"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "destination",
+          "route",
+          "forbidden",
+          "return_contract"
+        ],
+        "properties": {
+          "destination": {
+            "type": "string",
+            "minLength": 1
+          },
+          "route": {
+            "type": "array",
+            "minItems": 1
+          },
+          "forbidden": {
+            "type": "array",
+            "minItems": 1
+          },
+          "return_contract": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
+}

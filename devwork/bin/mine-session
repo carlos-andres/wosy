@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""mine-session: the continuity prompt's safety net (factory logbook 143, 148). Read-only, writes nothing.
+
+  mine-session <transcript.jsonl|--latest> <logbook.jsonl> [--model haiku] [--candidates <file.json>]
+
+--latest takes the newest transcript of the current directory in the Claude home in force (CLAUDE_CONFIG_DIR or
+~/.claude): this is the Claude Code adapter, so protocolo names no Claude home.
+
+Collects Calo's own words from a Claude Code transcript: plain user turns, AskUserQuestion answers and messages
+queued mid-turn. A simple model, through claude -p with no tools and no settings, returns decisions, corrections and
+open questions, each with a verbatim quote. A candidate survives only when its quote is found exact (whitespace
+folded) inside one of Calo's turns and the ledger does not already hold it. Prints one line per survivor,
+"kind<TAB>route<TAB>turn<TAB>quote", then the dropped counts. Calo confirms; protocolo --event writes the ledger,
+the auto-memory file is written by hand, a store row goes through an applier. --candidates reads the model's JSON
+from a file instead of calling it (test and control). Exit 0 with survivors or none; 1 on a bad input or model error.
+"""
+import glob, json, os, re, subprocess, sys, tempfile
+
+args = sys.argv[1:]
+if args and args[0] == "--latest":   # the newest transcript of the session's cwd, in the Claude home in force (logbook 163)
+    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    slug = re.sub(r"[^A-Za-z0-9]", "-", os.getcwd())
+    found = sorted(glob.glob(f"{home}/projects/{slug}/*.jsonl"), key=os.path.getmtime)
+    args[0] = found[-1] if found else "--latest"
+if len(args) < 2 or not all(os.path.isfile(a) for a in args[:2]):
+    sys.exit(__doc__)
+tr, led = args[:2]
+opt = lambda k, d: args[args.index(k) + 1] if k in args else d
+fold = lambda s: re.sub(r"\s+", " ", s).strip()
+
+turns = []
+def add(t):
+    t = (t or "").strip()
+    if t and not t.startswith("<") and t not in turns:
+        turns.append(t)
+for line in open(tr, encoding="utf-8"):
+    e = json.loads(line)
+    if e.get("type") == "attachment" and isinstance(e.get("attachment"), dict) and e["attachment"].get("type") == "queued_command":
+        add(e["attachment"].get("prompt"))
+    if e.get("type") != "user" or not isinstance(e.get("message"), dict):
+        continue
+    c = e["message"].get("content")
+    if isinstance(c, str):
+        add(c)
+        continue
+    for b in c or []:
+        if b.get("type") == "text":
+            add(b.get("text"))
+        elif b.get("type") == "tool_result":
+            r = b.get("content")
+            r = r if isinstance(r, str) else " ".join(x.get("text", "") for x in r or [] if isinstance(x, dict))
+            for a in re.findall(r'"=\s*"(.*?)"(?=\s*(?:,\s*"|\.\s|$))', r, re.S):   # AskUserQuestion: "question"="answer"
+                add(a)
+            m = re.search(r"the user said:\s*\n(.*?)(?:\n\s*\n|\Z)", r, re.S)     # a rejected tool call with Calo's note
+            if m:
+                add(m.group(1))
+
+ledger = fold(" ".join(json.loads(l).get("text", "") for l in open(led, encoding="utf-8") if l.strip())).lower()
+
+if "--candidates" in args:
+    raw = open(opt("--candidates", ""), encoding="utf-8").read()
+else:
+    ask = ("You read the owner's own messages from one work session, numbered. Return ONLY a JSON array, no prose. "
+           "Each item: {\"kind\": \"decision\"|\"correction\"|\"open_question\", \"route\": \"ledger\"|\"memory\"|\"store\", "
+           "\"turn\": <number>, \"quote\": \"<an exact substring of that message, 6 to 30 words, copied character for character>\"}. "
+           "decision = the owner chose something about the work (route ledger). correction = the owner pushed back on HOW the "
+           "assistant works with him: he rejected a question, said he prefers to do or say something first, asked to stop, "
+           "to verify first, to change the order or the format (route memory); never skip these. open_question = he asked "
+           "something no later message answers (route ledger). A fact about the systems goes to route store. At most 20 items, "
+           "corrections first.\n\n"
+           + json.dumps([{"turn": i, "message": t} for i, t in enumerate(turns)], ensure_ascii=False))
+    with tempfile.TemporaryDirectory() as d:
+        r = subprocess.run(["claude", "-p", "--model", opt("--model", "haiku"), "--tools", "", "--setting-sources", "",
+                            "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"],
+                           input=ask, capture_output=True, text=True, cwd=d, timeout=300)
+    out = json.loads(r.stdout or "{}")
+    if r.returncode or out.get("is_error"):
+        sys.exit(f"[X] model call failed: {(out.get('result') or r.stderr)[:200]}")
+    raw = out.get("result", "")
+raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+try:
+    cands = json.loads(raw)
+except json.JSONDecodeError:
+    sys.exit(f"[X] the model did not return JSON: {raw[:200]}")
+
+kept, fake, known = [], 0, 0
+for c in cands:
+    q = fold(str(c.get("quote", "")))
+    if not q or not any(q in fold(t) for t in turns):
+        fake += 1
+    elif any(" ".join(w[i:i + 6]) in ledger for w in [q.lower().split()] for i in range(max(1, len(w) - 5))):  # 6-word window
+        known += 1
+    else:
+        kept.append(c)
+        print(f"{c.get('kind')}\t{c.get('route')}\t{c.get('turn')}\t{q}")
+print(f"== {len(turns)} turns of Calo; {len(cands)} candidates: {len(kept)} kept, {fake} dropped (quote not verbatim), "
+      f"{known} dropped (already in the ledger); changed: nothing ==")

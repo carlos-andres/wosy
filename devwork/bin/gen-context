@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""gen-context: the whole task context.md, GENERATED from wosy (factory logbook 35; was gen-badge.py, logbook 145,
+A.5): the task-doc frontmatter plus the five body sections, composed through `brain pallet <term>` and the task's
+record row. The frontmatter is the YAML block that task-doc.schema.json gates. The body is one marked block, "Routes
+from wosy" (pallet brief, materials, references, gaps), then the hand-written prose (Calo 2026-10-01, factory logbook
+44, his item 49: wosy holds the recap and the routes, the task keeps the detail). With --keep <context.md> every line
+outside the marked block is carried over unchanged, and every non-empty frontmatter value of that file wins over the
+generated one (only updated and source_ref are regenerated; the pallet's version stays visible in the block); without it the five
+section headings are left for Calo to write. Output always goes to stdout; the file is never edited in place.
+
+Sources, field by field (decision-badge-contract-20260925.md section 6c.3):
+  kind, created, updated       convention and the clock
+  task_id, root, ticket_ref    record row of the task (store, read-only)
+  project_id                   pallet.project, the world the term belongs to (edge about / synonym)
+  role                         pallet.inputs.rol, one line
+  state                        record.status when it is in the enum, else open (SIN DATOS is a gap, not a state)
+  where_we_are, next_step      pallet.brief.en_que_nos_quedamos, pallet.brief.que_sigue
+  done_when                    pallet.verify.expect, the datum the term resolves to
+  ledger                       <root>/logbook.jsonl
+  source_ref                   brain pallet <term>; record <task_id>
+  para                         --para, human
+
+Usage: gen-context <task_id> --term <term> [--para "<texto>"] [--keep <context.md>] [--store <db>]  -> stdout
+Exit 1 with empty stdout when the term or the task does not resolve.
+"""
+import argparse, datetime, json, os, sqlite3, subprocess, sys
+
+STATES = {"open", "in-progress", "blocked", "in-verification", "closed"}
+UMB = "/Users/you/work/umbrella"
+
+BEGIN, END = "<!-- gen-context:begin, generated from brain pallet; edits here are overwritten -->", "<!-- gen-context:end -->"
+ap = argparse.ArgumentParser()
+ap.add_argument("task_id"); ap.add_argument("--term", required=True); ap.add_argument("--para", default="")
+ap.add_argument("--keep"); ap.add_argument("--store", default=f"{UMB}/.devwork/brain.db")
+a = ap.parse_args()
+prose, kept = None, {}
+if a.keep:
+    kept = json.loads(subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", a.keep], capture_output=True, text=True).stdout or "{}")
+    old = open(a.keep, encoding="utf-8").read()
+    body = (old.split("\n---\n", 1) + [""])[1] if old.startswith("---") else old
+    a.para = a.para if a.para.strip() else str(kept.get("para") or "")
+    if BEGIN in body and END in body:
+        body = body[:body.index(BEGIN)] + body[body.index(END) + len(END):]
+    prose = body.strip("\n")
+if not a.para.strip():
+    sys.exit(1)
+
+p = subprocess.run(["brain", "pallet", a.term], cwd=UMB, capture_output=True, text=True)
+if p.returncode != 0 or not p.stdout.strip():
+    sys.exit(1)
+out = p.stdout
+for var, root in (json.loads(out).get("path_vars") or {}).items():  # brain writes its root once as $D (pallet-compact-20261003)
+    out = out.replace(var + "/", root + "/")  # documents keep absolute paths
+pal = json.loads(out)
+
+con = sqlite3.connect(f"file:{a.store}?mode=ro", uri=True)
+row = con.execute("SELECT status, created, json_extract(doc,'$.root'), json_extract(doc,'$.ticket') FROM record WHERE type='task' AND id=?", (a.task_id,)).fetchone()
+if row is None:
+    sys.exit(1)
+status, created, root, ticket = row
+tickets = json.loads(ticket) if ticket else []
+today = datetime.date.today().isoformat()
+
+def one_line(s):
+    return " ".join(str(s or "").split())
+
+def value(s):  # a pallet "[X] ..." line states a gap, not a value: the field stays empty (factory logbook 81, 104)
+    v = one_line(s)
+    return None if not v or v.startswith("[X]") else v
+
+badge = {
+    "kind": "task-context",
+    "role": one_line(pal["inputs"]["rol"]),
+    "task_id": a.task_id,
+    "project_id": pal["project"],
+    "ticket_ref": ", ".join(tickets) if tickets else None,
+    "root": root,
+    "para": a.para.strip(),
+    "state": status if status in STATES else "open",
+    "where_we_are": one_line(pal["brief"]["en_que_nos_quedamos"]),
+    "next_step": value(pal["brief"]["que_sigue"]),
+    "done_when": value((pal.get("verify") or {}).get("expect")),
+    "waiting_on": None,
+    "ledger": f"{root}/logbook.jsonl",
+    "created": created or today,
+    "updated": today,
+    "source_ref": f"brain pallet {a.term}; record {a.task_id}",
+}
+# Badge fields (factory logbook 77), from wosy edges; route and out_of_scope stay hand-written.
+targets = [t for (t,) in con.execute("SELECT to_id FROM edge WHERE from_id=? AND (to_id LIKE 'merchant:%' OR to_id GLOB 'ticket:[A-Z]*-[0-9]*') ORDER BY 1", (f"task:{a.task_id}",))]
+merchants = [t[7:] for t in targets if t.startswith("merchant:")]
+if merchants:
+    badge["entity"] = "merchant " + ", ".join(merchants)
+shared = [n for (n,) in con.execute(  # most shared merchant/ticket first, then id
+    "SELECT substr(e2.from_id, 6) FROM edge e1 JOIN edge e2 ON e2.to_id = e1.to_id WHERE e1.from_id = ?1"
+    " AND (e1.to_id LIKE 'merchant:%' OR e1.to_id GLOB 'ticket:[A-Z]*-[0-9]*') AND e2.from_id LIKE 'task:%' AND e2.from_id <> ?1"
+    " GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 8", (f"task:{a.task_id}",))]
+if shared:
+    badge["neighbours"] = shared
+w = con.execute("SELECT root_path FROM project WHERE id=?", (pal["project"],)).fetchone()
+if w and w[0] and os.path.exists(f"{w[0]}/master.md"):
+    badge["world_doc"] = f"{w[0]}/master.md"
+for k, v in kept.items():
+    if k not in ("updated", "source_ref") and v not in (None, ""):
+        badge[k] = v
+print("---")
+print(f"# yaml-language-server: $schema=/Users/you/.devwork/_schema/task-doc.schema.json")
+for k, v in badge.items():
+    print(f"{k}: {json.dumps(v, ensure_ascii=False) if v is not None else 'null'}")
+print("---")
+b, inp = pal["brief"], pal.get("inputs") or {}
+print(f"\n{BEGIN}\n## Routes from wosy\n")
+for head, key in (("What it is", "de_que_trata"), ("Why", "porque"), ("What for", "para_que"),
+                  ("Where we are", "en_que_nos_quedamos"), ("What is next", "que_sigue")):
+    print(f"- **{head}.** {one_line(b.get(key)) or '[X] the pallet has no text here.'}")
+print(f"- **Materials.** {one_line(inp.get('materiales')) or '[X]'}")
+for r in inp.get("referencias") or []:
+    print(f"- Reference: {one_line(r if isinstance(r, str) else json.dumps(r, ensure_ascii=False))}")
+for g in pal.get("gaps") or []:
+    print(f"- Gap: {one_line(g)}")
+print(f"\n{END}\n")
+if prose:
+    print(prose)
+else:
+    print(f"# {a.task_id} — context\n")
+    for head in ("What it is", "Why", "What for", "Where we are", "What is next"):
+        print(f"## {head}\n\n[TODO] Calo writes this section.\n")

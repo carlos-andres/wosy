@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "logbook-event.schema.json",
+  "title": "devwork · one line of the logbook. JSONL, append-only, written during the session, never rewritten.",
+  "description": "Governs ONE line, not the file. srs.md B1 makes the file append-only, so the file has no schema and every line has this one. The gate splits the file and validates each line: while IFS= read -r l; do printf '%s' \"$l\" > \"$t\"; check-jsonschema --schemafile logbook-event.schema.json \"$t\"; done < <file>.jsonl",
+  "type": "object",
+  "required": ["id", "ts", "project", "type", "text", "pointer"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "unique within the file. A briefing cites this id and an unresolvable id fails the briefing build (srs.md C1), so the id is the join key between the logbook and the brief."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "description": "UTC. The trailing Z is required, so two logbooks written in different places still sort against each other (srs.md B2). When only the date is recoverable, use T00:00:00Z and say so in text."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "project_id, never a directory. The umbrella holds three, so a directory does not identify one (context.md section 4, decision 2)."
+    },
+    "task_id": { "type": ["string", "null"] },
+    "type": {
+      "enum": ["decision", "discard", "correction", "gotcha-candidate", "verification", "delivery"],
+      "description": "the first five are srs.md B2 verbatim. delivery is added for the 0-hit counter, which is the measurement v2's stats verb already reads from a sidecar log: loads, 0-hits, latencies."
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "pointer": {
+      "$ref": "#/$defs/pointer",
+      "description": "srs.md B2. An event with no pointer is a memory and not evidence."
+    },
+    "supersedes": {
+      "type": ["string", "null"],
+      "description": "the id this event corrects. Both lines stay in the file, which is D-4: a store carrying both versions with their dates is safer than one carrying a single clean stale version."
+    },
+    "delivery": {
+      "type": "object",
+      "required": ["hit", "consumer"],
+      "additionalProperties": false,
+      "description": "the measurement of one delivery. Required when type is delivery.",
+      "properties": {
+        "hit": {
+          "type": "boolean",
+          "description": "false is a 0-hit: the delivery did not suffice and the session asked again, corrected it, or stopped. This is the counter the 25 rounds of document tuning lacked, which is why they could not detect their own failure."
+        },
+        "consumer": { "enum": ["fresh-session", "mid-session-gap", "subagent"] },
+        "tokens": { "type": ["integer", "null"], "minimum": 0, "description": "omit when not measured. Never carry a measurement taken on a different date than ts." },
+        "latency_ms": { "type": ["number", "null"], "minimum": 0 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["type"], "properties": { "type": { "const": "delivery" } } },
+      "then": { "required": ["delivery"] }
+    }
+  ],
+  "$defs": {
+    "pointer": {
+      "type": "object",
+      "required": ["kind", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["path", "path_line", "command", "ticket", "canary"] },
+        "value": { "type": "string", "minLength": 1, "description": "absolute for path and path_line" }
+      }
+    }
+  }
+}

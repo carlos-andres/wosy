@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan-doc.schema.json",
+  "title": "devwork · tasks/<id>/plan.md — the spec-kit plan, frontmatter only. Its decision graph is the ```yaml graph block, gated by plan-graph.schema.json through .devwork/bin/plan-graph.",
+  "description": "Ruled by Calo 2026-09-30: spec-kit outside, the decision graph inside. The frontmatter carries no state: the state of a plan is its proofs, re-run by plan-graph --run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "role", "task_id", "ticket_ref", "spec", "para", "created", "updated"],
+  "properties": {
+    "kind": {"const": "task-plan"},
+    "role": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$", "description": "one line of prose: the approach this plan takes"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "project_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "ticket_ref": {"type": ["string", "null"], "pattern": "^[A-Z]+-[0-9]+$"},
+    "spec": {"type": "string", "pattern": "^/.+\\.md$", "description": "absolute path of the spec.md this plan answers"},
+    "para": {"type": "string", "minLength": 1, "description": "the only human field, in Spanish"},
+    "created": {"type": "string", "format": "date"},
+    "updated": {"type": "string", "format": "date"}
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prompt-doc.schema.json",
+  "title": "devwork · tasks/<id>/prompt.md — the flight plan of a task, frontmatter only. The body is XML sections from scaffolds/prompt.md: <role>, <objective>, <context>, <output_format> required, the rest optional.",
+  "description": "Ruled by Calo 2026-10-02 (factory-redesign logbook 75): a reference template usable in part, with a few minimum fields. The prompt points at the task context.md, the badge, and never copies it (DRY).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "role", "task_id", "context", "para", "verify", "pass_when", "created", "updated"],
+  "properties": {
+    "kind": {"const": "task-prompt"},
+    "role": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$", "description": "one line: who executes this prompt"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "project_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "ticket_ref": {"type": ["string", "null"], "pattern": "^[A-Z]+-[0-9]+$"},
+    "context": {"type": "string", "pattern": "^/.+/context\\.md$", "description": "absolute path of the task context.md, the badge this prompt runs under"},
+    "para": {"type": "string", "minLength": 1, "description": "the only human field, in Spanish"},
+    "access": {"enum": ["read-only", "local-write", "prod-read"], "description": "read-only unless Calo says otherwise"},
+    "verify": {"type": "string", "minLength": 1, "description": "the exact command that checks the result"},
+    "pass_when": {"type": "string", "minLength": 1, "description": "what verify must show: a count, a diff, a file:line; never 'works'"},
+    "rollback": {"type": "string", "minLength": 1, "description": "required in practice when the prompt emits a write: the inverse write, or the SELECT that captures the prior value"},
+    "output": {"type": "string", "minLength": 1, "description": "the exact artifact and its format"},
+    "created": {"type": "string", "format": "date"},
+    "updated": {"type": "string", "format": "date"}
+  }
+}

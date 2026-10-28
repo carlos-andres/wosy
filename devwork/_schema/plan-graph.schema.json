@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plan-graph.schema.json",
+  "title": "devwork · the decision graph of a plan — the fenced ```yaml graph block inside tasks/<id>/plan.md (spec-kit plan template), or a legacy plan.yml read through yq '{tasks, risks, hypothesis}'.",
+  "description": "Extracted 2026-09-30 from the plans that shipped: ticket-1437 and ticket-2417 plan.yml (proof_cmd per node, blocks_on_fail, dispatch, hypothesis/falsified_if, RK risks), the worker-runtime74 plan-b queue (phase, phase_gate, 50/50 closed) and ticket-1435 (control, on_fail, ship). Lessons of the 25-plan audit: every node carries a proof_cmd that can fail; no status field, because every written status went stale — state comes from logbook.jsonl and a re-run of the proofs; 15 nodes at most, split the task beyond that. Cross-node rules (ids unique, depends_on resolves, no cycle) are checked by bin/plan-graph, not here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tasks"],
+  "properties": {
+    "tasks": {"type": "array", "minItems": 1, "maxItems": 15, "items": {"$ref": "#/$defs/node"}},
+    "risks": {"type": ["array", "null"], "items": {"$ref": "#/$defs/risk"}},
+    "hypothesis": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/hypothesis"},
+        {"type": "array", "items": {"$ref": "#/$defs/hypothesis"}}
+      ]
+    }
+  },
+  "$defs": {
+    "line": {"type": "string", "minLength": 1},
+    "ids": {"type": ["array", "null"], "items": {"type": "string", "minLength": 1}},
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "depends_on", "done_when", "proof_cmd"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z][A-Za-z0-9._-]*$"},
+        "name": {"$ref": "#/$defs/line"},
+        "kind": {"enum": ["research", "change", "verify", "gate", "synthesize"], "description": "a research node and a change set never share a node (mfg plan.yml, 2026-09-24)"},
+        "depends_on": {"$ref": "#/$defs/ids"},
+        "done_when": {"$ref": "#/$defs/line", "description": "the pass condition, with file:line where a fact decides it"},
+        "proof_cmd": {"$ref": "#/$defs/line", "description": "one shell command that exits non-zero when done_when is false; assert a durable output, never the working tree"},
+        "control": {"$ref": "#/$defs/line", "description": "what must make this node fail; a check that cannot fail is not a check"},
+        "on_fail": {"$ref": "#/$defs/line", "description": "the node to return to"},
+        "blocks_on_fail": {"$ref": "#/$defs/ids"},
+        "gate": {"oneOf": [{"type": "boolean"}, {"$ref": "#/$defs/line"}], "description": "the owner decides before any dependant runs; a string names who decides and how"},
+        "phase": {"$ref": "#/$defs/line"},
+        "tier": {"$ref": "#/$defs/line"},
+        "max_turns": {"type": "integer", "minimum": 1},
+        "effort": {"enum": ["low", "medium", "high", "xhigh", "max"], "description": "--effort of the Obra run; copied into mission-T<n>.md with tier as model"},
+        "advisor": {"type": ["string", "null"], "description": "--advisor model, only on a node that needs one (ticket-1441 logbook 42)"},
+        "touches": {"$ref": "#/$defs/ids"},
+        "allowed_tools": {"oneOf": [{"$ref": "#/$defs/line"}, {"$ref": "#/$defs/ids"}], "description": "the --allowedTools string, or a list"},
+        "dispatch": {"type": ["string", "null"]},
+        "scope": {"$ref": "#/$defs/line"},
+        "do": {"$ref": "#/$defs/line"},
+        "ship": {"$ref": "#/$defs/line"},
+        "note": {"$ref": "#/$defs/line"}
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "what", "mitigation"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^RK[0-9]+$"},
+        "severity": {"enum": ["low", "medium", "high", "critical"]},
+        "what": {"$ref": "#/$defs/line"},
+        "mitigation": {"$ref": "#/$defs/line"}
+      }
+    },
+    "hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "claim", "falsified_if"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^H[0-9]+$"},
+        "claim": {"$ref": "#/$defs/line"},
+        "falsified_if": {"$ref": "#/$defs/line"},
+        "on_falsified": {"$ref": "#/$defs/line"}
+      }
+    }
+  }
+}

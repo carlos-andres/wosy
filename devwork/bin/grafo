@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""grafo — one Mermaid page with every project, its tasks, and each task's plan graph.
+
+  grafo [out.html]     default /Users/you/.devwork/dist/grafo.html; open it in a browser
+
+Project -> task comes from logbook.jsonl (field project). Task -> nodes comes from the
+```yaml graph block of plan.md or a legacy plan.yml (depends_on = edges).
+Skips _archive, _scratch and drafts. Mermaid loads from a CDN, so the page needs network.
+"""
+import json, re, subprocess, sys
+from pathlib import Path
+
+ROOTS = [Path.home() / ".devwork", Path("/Users/you/work/umbrella/.devwork"),
+         Path("/Users/you/work/source/.devwork")]
+FENCE = re.compile(r"^```yaml graph\n(.*?)^```", re.S | re.M)
+SKIP = {"_archive", "_scratch", "drafts"}
+
+
+def sid(s):
+    return re.sub(r"\W", "_", s)
+
+
+def plan_nodes(task_dir):
+    for name in ("plan.md", "plan.yml"):
+        p = task_dir / name
+        if not p.exists():
+            continue
+        text = p.read_text()
+        if name == "plan.md":
+            m = FENCE.search(text)
+            if not m:
+                continue
+            text = m.group(1)
+        r = subprocess.run(["yq", "-o=json", ".tasks // []"], input=text, capture_output=True, text=True)
+        try:
+            return json.loads(r.stdout) or []
+        except json.JSONDecodeError:
+            return []
+    return []
+
+
+tasks = {}  # task_id -> {project, dir, events, last}
+for root in ROOTS:
+    tdir = root / "tasks"
+    if not tdir.is_dir():
+        continue
+    for d in sorted(p for p in tdir.iterdir() if p.is_dir()):
+        t = tasks.setdefault(d.name, {"project": "sin-proyecto", "dir": d, "events": 0, "last": ""})
+        lb = d / "logbook.jsonl"
+        if lb.exists():
+            for line in lb.read_text().splitlines():
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                t["events"] += 1
+                t["project"] = e.get("project") or t["project"]
+                t["last"] = max(t["last"], e.get("ts", ""))
+
+out = ["flowchart LR"]
+by_project = {}
+for tid, t in tasks.items():
+    by_project.setdefault(t["project"], []).append(tid)
+for proj, tids in sorted(by_project.items()):
+    out.append(f'subgraph P_{sid(proj)}["{proj}"]')
+    for tid in sorted(tids):
+        t = tasks[tid]
+        nodes = plan_nodes(t["dir"])
+        label = f'{tid}<br/>{t["events"]} eventos · {t["last"][:10] or "sin logbook"}'
+        if not nodes:
+            out.append(f'T_{sid(tid)}["{label}"]')
+            continue
+        out.append(f'subgraph T_{sid(tid)}["{label}"]')
+        for n in nodes:
+            nm = str(n.get("name", "")).replace('"', "'")[:60]
+            out.append(f'{sid(tid)}__{sid(n["id"])}["{n["id"]}: {nm}"]')
+        for n in nodes:
+            for dep in n.get("depends_on") or []:
+                out.append(f'{sid(tid)}__{sid(dep)} --> {sid(tid)}__{sid(n["id"])}')
+        out.append("end")
+    out.append("end")
+
+dest = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.home() / ".devwork/dist/grafo.html"
+dest.write_text(f"""<!doctype html><meta charset="utf-8"><title>grafo devwork</title>
+<body style="font-family:system-ui;margin:1rem"><pre class="mermaid">
+{chr(10).join(out)}
+</pre><script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+mermaid.initialize({{startOnLoad: true, maxTextSize: 500000, maxEdges: 5000}});
+</script>""")
+print(f"{dest}: {len(by_project)} projects, {len(tasks)} tasks, "
+      f"{sum(1 for l in out if '-->' in l)} edges")

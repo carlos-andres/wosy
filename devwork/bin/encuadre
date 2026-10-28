@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""encuadre: the read side of the protocolo de encuadre (factory logbook 77). Read-only, no clock: same input, same output.
+
+  encuadre resolve <term>        G1.N1: the initial file(s) for a world, synonym, task id, ticket key or merchant id,
+                                 one line each "kind<TAB>id<TAB>path". Exit 1 when nothing resolves: ask Calo which one (D3)
+  encuadre badge <context.md>    G1.N6: the badge a subagent receives first (D6), from the task frontmatter.
+                                 Exit 1 when the frontmatter fails task-doc.schema.json: no badge, no dispatch (D5)
+  encuadre traps <context.md> [--days N]   G1.N7 function 4 (factory logbook 148): the live error gotchas of the task's
+                                 world, one line each "OK|STALE<TAB>gotcha:N<TAB>why". STALE when an absolute source path is
+                                 gone or its :line is past the end, or last_verified_at is older than N days (default 30)
+                                 before the context.md's `updated` (no clock). Exit 1 on any STALE: dispatch the archaeologist
+                                 with the badge to re-verify each before work (D12); `brain confirm` then restamps it
+  encuadre continuity <context.md>   G1.N7 (factory logbook 148): the continuity prompt draft on stdout, projected from the
+                                 context.md, the store, the ledger seal and the previous prompt beside it: reads, focus.step
+                                 (next_step), traps, snapshot (the ledger ids since the last seal), done_when, and the
+                                 carried verify, locked, prohibitions and expires_when. What only the model can write is
+                                 marked TODO(model); briefing-check S1 fails while one is left. Exit 1 without next_step (D7)
+  encuadre n8 <task_dir>         G1.N8 dry-run: every .sql of the task against the query library, DRY first (factory logbook 85).
+                                 One line each "verdict<TAB>file<TAB>detail"; moves nothing. Verdicts:
+                                   DUP     same statement as a library query once comments, case, spacing and literals are
+                                           normalized: archive the task copy, never overwrite the library
+                                   NEAR    same table set as a library query: review, extend that query or keep the task copy
+                                   PROMOTE cited in the task's own .md or ledger, every table it reads is read by 3 or more
+                                           tasks (repeated research; measured 2026-10-02: no statement repeats verbatim across
+                                           tasks, tables do), the library does not cover them, and it only reads (the library holds
+                                           reads): a library candidate, which needs the 4-line header first when it lacks one
+                                   KEEP    task-specific; archived with the task
+  encuadre sql <query> NAME=value ...   the self-contained .sql that mysqlp runs (gap Q9, q.sh retired; factory logbook 93):
+                                 a library query (basename or path) with every :NAME inlined, its 4-line header kept with
+                                 PARAMS rewritten, and SET SQL_SELECT_LIMIT = DEFAULT; before the statement. Stdout only.
+                                 Exit 1 when a :NAME stays unset, a value is not [A-Za-z0-9_.-]+, or the query names the
+                                 local clone's tower_shopfront. schema
+  encuadre repoint <old copy> <new file>   path:line sources survive an edit (interlude item 2, factory logbook 101): maps
+                                 every line of the old copy to the line that now holds the same text (difflib), and prints
+                                 the UPDATE .sql that re-points each live gotcha or lesson whose source_ref cites <new file>:N
+                                 at a moved line. Stdout only; the owner's applier runs it. A line whose text is gone is
+                                 reported as LOST in a comment, never guessed. Exit 0 with a header-only file when nothing moved.
+                                 Run it once per edit, with the copy taken just before it: a second run with the same copy
+                                 reads the already re-pointed numbers as old ones
+  [--store <db>]                 another store (a copy, for a control)
+  [--library <dir>]              another query library (a copy, for a control)
+"""
+import difflib, glob, json, os, re, sqlite3, subprocess, sys, tempfile
+
+STORE = "/Users/you/work/umbrella/.devwork/brain.db"
+LIBRARY = "/Users/you/work/umbrella/.devwork/queries/library"
+SCHEMA = "/Users/you/.devwork/_schema/task-doc.schema.json"
+args = sys.argv[1:]
+if len(args) < 2 or args[0] not in ("resolve", "badge", "n8", "sql", "repoint", "traps", "continuity"):
+    sys.exit(__doc__)
+verb, arg = args[0], args[1]
+opt = lambda k, d: args[args.index(k) + 1] if k in args else d
+
+if verb == "repoint":
+    if len(args) < 3:
+        sys.exit("usage: encuadre repoint <old copy> <new file> [--store <db>]")
+    new_path = os.path.abspath(args[2])
+    old, new = open(arg, encoding="utf-8").read().split("\n"), open(new_path, encoding="utf-8").read().split("\n")
+    sm = difflib.SequenceMatcher(None, old, new, autojunk=False)
+    moved = {a + k + 1: b + k + 1 for a, b, size in sm.get_matching_blocks() for k in range(size)}  # old line -> new line
+    con = sqlite3.connect(f"file:{opt('--store', STORE)}?mode=ro", uri=True)
+    ref = re.compile(re.escape(new_path) + r":(\d+)\b")
+    print(f"-- TABLES: gotcha, lesson\n-- SCHEMA: none (store, not TC)\n-- PARAMS: none\n-- DESC: re-point path:line sources of {new_path} after an edit, from {os.path.abspath(arg)}")
+    rows = con.execute("SELECT 'gotcha', id, source_ref FROM gotcha WHERE superseded_by IS NULL AND instr(source_ref, ?) "
+                       "UNION ALL SELECT 'lesson', id, source_ref FROM lesson WHERE superseded_by IS NULL AND instr(source_ref, ?) ORDER BY 1, 2",
+                       (new_path + ":", new_path + ":"))
+    for t, rid, src in rows:
+        cited = sorted({int(n) for n in ref.findall(src)})
+        notes = [f"LOST line {n}: its text is not in the new file" if n not in moved else f"{n} -> {moved[n]}" for n in cited if moved.get(n) != n]
+        print("".join(f"-- {t}:{rid} {x}\n" for x in notes), end="")
+        fixed = ref.sub(lambda m: f"{new_path}:{moved.get(int(m.group(1)), int(m.group(1)))}", src)  # all refs in one pass, no chained rewrites
+        if fixed != src:  # SQLite quotes the literals; nothing is escaped by hand
+            q = lambda v: con.execute("SELECT quote(?)", (v,)).fetchone()[0]
+            print(f"UPDATE {t} SET source_ref = {q(fixed)} WHERE id = {q(rid)} AND source_ref = {q(src)};")
+    sys.exit(0)
+
+if verb == "sql":
+    lib_dir = opt("--library", LIBRARY)
+    path = arg if os.path.isfile(arg) else os.path.join(lib_dir, arg if arg.endswith(".sql") else arg + ".sql")
+    if not os.path.isfile(path):
+        sys.exit(f"[X] no query {arg} in {lib_dir}")
+    vals = dict(a.split("=", 1) for a in args[2:] if "=" in a and not a.startswith("--"))
+    bad = [k for k, v in vals.items() if not re.fullmatch(r"[A-Za-z0-9_.-]+", v)]
+    if bad:
+        sys.exit(f"[X] unsafe value for {', '.join(bad)}: only letters, digits, _ . -")
+    s = open(path, encoding="utf-8").read()
+    head = [l for l in s.splitlines() if re.match(r"-- (TABLES|SCHEMA|PARAMS|DESC):", l)]
+    body = "\n".join(l for l in s.splitlines() if l not in head and not re.match(r"\s*SET SQL_SELECT_LIMIT", l, re.I)).strip()
+    if "tower_shopfront." in body:
+        sys.exit(f"[X] {os.path.basename(path)} names the local clone's tower_shopfront. schema; fix the library first (gap Q8)")
+    body = re.sub(r":([A-Z][A-Z_]*)\b", lambda m: vals.get(m.group(1), m.group(0)), body)
+    left = sorted(set(re.findall(r":([A-Z][A-Z_]*)\b", body)))
+    if left:
+        sys.exit(f"[X] {os.path.basename(path)} still needs: {', '.join(left)} (pass NAME=value)")
+    inl = ", ".join(f"{k}={v}" for k, v in sorted(vals.items()))
+    head = [f"-- PARAMS: none (inlined: {inl}; rendered from {os.path.basename(path)})" if l.startswith("-- PARAMS:") else l for l in head]
+    print("\n".join(head) + "\nSET SQL_SELECT_LIMIT = DEFAULT;\n" + body)
+    sys.exit(0)
+
+if verb == "n8":
+    def norm(sql):  # the statement only: no comments, one case, one space, literals as ?
+        sql = re.sub(r"--[^\n]*|/\*.*?\*/", " ", sql, flags=re.S).lower()
+        sql = re.sub(r"\bset\s+sql_select_limit\s*=\s*default\s*;", " ", sql)  # encuadre sql adds it to every render
+        sql = re.sub(r"'(?:[^']|'')*'|\b\d+\b|:[a-z_]+", "?", sql)
+        return " ".join(sql.split()).rstrip("; ")
+    def tables(sql):
+        return frozenset(re.findall(r"\b(?:from|join|update|into)\s+`?([a-z_][a-z0-9_]*)`?", norm(sql)))
+    lib_dir = opt("--library", LIBRARY)
+    lib = {f: open(os.path.join(lib_dir, f), errors="ignore").read() for f in sorted(os.listdir(lib_dir)) if f.endswith(".sql")}
+    by_norm = {norm(s): f for f, s in lib.items()}
+    near = lambda n, t: max((f for f, s in lib.items() if tables(s) == t), key=lambda f: difflib.SequenceMatcher(None, n, norm(lib[f])).ratio(), default=None)
+    lib_tables = set().union(*map(tables, lib.values()))
+    readers = {}  # table -> tasks whose .sql read it, over every task folder beside this one
+    tasks_root = os.path.dirname(os.path.abspath(arg.rstrip("/")))
+    for p in glob.glob(f"{tasks_root}/*/**/*.sql", recursive=True):
+        for tb in tables(open(p, errors="ignore").read()):
+            readers.setdefault(tb, set()).add(os.path.relpath(p, tasks_root).split(os.sep)[0])
+    hot = {tb for tb, ts in readers.items() if len(ts) >= 3}
+    cites = "".join(open(p, errors="ignore").read() for p in glob.glob(f"{arg}/**/*.md", recursive=True) + glob.glob(f"{arg}/**/*.jsonl", recursive=True))
+    rows = []
+    for dp, _, fs in sorted(os.walk(arg)):
+        for f in sorted(fs):
+            if not f.endswith(".sql"):
+                continue
+            p = os.path.join(dp, f)
+            s = open(p, errors="ignore").read()
+            n, t = norm(s), tables(s)
+            if n in by_norm:
+                v, d = "DUP", f"library/{by_norm[n]}"
+            elif t and near(n, t):
+                v, d = "NEAR", f"library/{near(n, t)} reads the same tables (closest)"
+            elif f in cites and t and t <= hot and not t <= lib_tables and not re.search(r"\b(update|delete|insert|replace|alter|create|drop|truncate)\b", n):
+                v, d = "PROMOTE", ("header ok" if s.lstrip().startswith("-- TABLES:") else "needs the 4-line header") + f"; tables {','.join(sorted(t))}"
+            else:
+                v, d = "KEEP", ",".join(sorted(t)) or "no table read"
+            rows.append((v, os.path.relpath(p, arg), d))
+    for r in sorted(rows, key=lambda r: ("DUP NEAR PROMOTE KEEP".split().index(r[0]), r[1])):
+        print("\t".join(r))
+    sys.exit(0)
+
+if verb == "resolve":
+    con = sqlite3.connect(f"file:{opt('--store', STORE)}?mode=ro", uri=True)
+    q = lambda sql, *p: con.execute(sql, p).fetchall()
+    task_ctx = lambda t: (q("SELECT json_extract(doc,'$.root') FROM record WHERE type='task' AND id=?", t) or [[None]])[0][0]
+    out = []
+    for (w, root) in q("SELECT p.id, p.root_path FROM project p WHERE p.id=? OR p.id IN (SELECT canonical FROM locate WHERE term=?)", arg, arg.lower()):
+        out.append(("world", w, f"{root}/master.md" if os.path.exists(f"{root}/master.md") else root))
+    tasks = [arg] if task_ctx(arg) else []
+    # A digit term is an entity id: a merchant, or a feed source or location that the store hangs off a merchant.
+    targets = [f"ticket:{arg.upper()}"]
+    if arg.isdigit():
+        targets = [f"merchant:{arg}"] + [d for (d,) in q("SELECT from_id FROM edge WHERE rel IN ('source_id', 'location') "
+                                                       "AND (to_id = ? OR to_id LIKE 'source:%:' || ?)", f"merchant_location:{arg}", arg)]
+    # A synonym whose canonical is a merchant or a file resolves too, not only one that names a world (G4 option B).
+    syn = [c for (c,) in q("SELECT canonical FROM locate WHERE term=?", arg.lower())]
+    targets += [c for c in syn if c.startswith("merchant:")]
+    out += [("file", os.path.basename(c[5:]), c[5:]) for c in syn if c.startswith("file:") and os.path.exists(c[5:])]
+    for target in targets:
+        tasks += [f[5:] for (f,) in q("SELECT from_id FROM edge WHERE to_id=? AND from_id LIKE 'task:%' ORDER BY 1", target)]
+    for t in dict.fromkeys(tasks):
+        root = task_ctx(t)
+        if root:
+            out.append(("task", t, f"{root}/context.md" if os.path.exists(f"{root}/context.md") else root))
+    for row in out:
+        print("\t".join(row))
+    if not out and arg.isdigit():
+        sys.exit(f"[X] {arg} is an entity id no task in the store reaches (merchant, feed source or location): hand Calo one query, "
+                 "library aer_merchant_by_source_id.sql through encuadre sql and ! mysqlp (D4)")
+    sys.exit(0 if out else f"[X] {arg} resolves to no world, task, ticket or merchant: ask Calo which one and which file is the initial one (D3)")
+
+if verb == "traps":
+    import datetime
+    t = json.loads(subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", arg], capture_output=True, text=True).stdout or "{}")
+    if not t.get("project_id") or not t.get("updated"):
+        sys.exit(f"[X] {arg} names no project_id or no updated: no world, no traps")
+    ref, days, stale = datetime.date.fromisoformat(str(t["updated"])[:10]), int(opt("--days", "30")), 0
+    con = sqlite3.connect(f"file:{opt('--store', STORE)}?mode=ro", uri=True)
+    for i, src, ver in con.execute("SELECT id, source_ref, last_verified_at FROM gotcha WHERE project_id = ? AND severity = 'error' "
+                                   "AND superseded_by IS NULL ORDER BY id", (t["project_id"],)):
+        why = []
+        for p, n in re.findall(r"(/(?:Users|Volumes)/[^\s:;,`'\")]+)(?::(\d+))?", src or ""):
+            if not os.path.exists(p):
+                why.append(f"source gone {p}")
+            elif n and os.path.isfile(p) and sum(1 for _ in open(p, errors="ignore")) < int(n):
+                why.append(f"line {n} past the end of {p}")
+        age = (ref - datetime.date.fromisoformat((ver or "1970-01-01")[:10])).days
+        if age > days:
+            why.append(f"verified {age} days before the frame")
+        print(f"STALE\tgotcha:{i}\t{'; '.join(why)}" if why else f"OK\tgotcha:{i}\tverified {age} days before the frame")
+        stale += bool(why)
+    sys.exit(f"[X] {stale} stale traps: dispatch the archaeologist with the badge to re-verify each before work (D12)" if stale else 0)
+
+if verb == "continuity":
+    t = json.loads(subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", arg], capture_output=True, text=True).stdout or "{}")
+    if not t.get("next_step"):
+        sys.exit(f"[X] {arg} has no next_step: write it into the context.md first (D7), then project the prompt")
+    root = t.get("root") or os.path.dirname(os.path.abspath(arg))
+    prev_p = os.path.join(root, "next-session-prompt.md")
+    prev = json.loads(subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", prev_p], capture_output=True, text=True).stdout or "{}") \
+        if os.path.isfile(prev_p) else {}
+    led = t.get("ledger") or os.path.join(root, "logbook.jsonl")
+    last = sum(1 for l in open(led, encoding="utf-8") if l.strip()) if os.path.isfile(led) else 0
+    seal = os.path.join(os.path.dirname(led), "logbook.seal")
+    seals = [l.split()[0] for l in open(seal)] if os.path.isfile(seal) else []
+    sealed = int(seals[-1]) if seals else 0
+    con = sqlite3.connect(f"file:{opt('--store', STORE)}?mode=ro", uri=True)
+    traps = [f"gotcha:{i}" for (i,) in con.execute("SELECT id FROM gotcha WHERE project_id = ? AND severity = 'error' "
+                                                   "AND superseded_by IS NULL ORDER BY id", (t.get("project_id"),))]
+    todo = lambda what: f"TODO(model): {what}"
+    reads = [os.path.abspath(arg)] + [p for p in (os.path.join(root, "plan.md"), t.get("world_doc")) if p and os.path.isfile(p)]
+    fm = {"kind": "continuity",
+          "description": todo(f"one sentence: where {t.get('task_id')} stands, citing logbook ids of {sealed + 1}-{last}"),
+          "form": "paragraph", "project_id": t.get("project_id"), "task_id": t.get("task_id"), "cwd": prev.get("cwd") or root,
+          "reads": reads,
+          "verify": prev.get("verify") or {"cmd": todo("the command that proves the state"), "expect": todo("its exact output")},
+          "focus": {"step": t["next_step"], "expect": todo("the result the step must produce"), "from": "context.md next_step"},
+          "traps": traps, "snapshot": f"{sealed + 1}-{last}",
+          "first_action": f"Run verify, then /Users/you/.devwork/bin/encuadre traps {os.path.abspath(arg)}: any STALE dispatches "
+                          "the archaeologist with the badge before work (D12). Fill the Receiver verdict and write it with "
+                          "/Users/you/.devwork/bin/protocolo --event. Then the focus. Never commit, push or install: hand Calo the line.",
+          "done_when": t.get("done_when"),
+          "locked": prev.get("locked") or [], "prohibitions": prev.get("prohibitions") or [],
+          "expires_when": prev.get("expires_when") or todo("the observation that makes this prompt false"),
+          "replaces": todo(f"the archived copy of {prev_p}") if prev else None,
+          "created": str(t.get("updated")), "updated": str(t.get("updated")),
+          "source_ref": os.path.relpath(prev_p, "/Users/you/.devwork") if prev_p.startswith("/Users/you/.devwork/") else prev_p}
+    y = subprocess.run(["yq", "-p=json", "-o=yaml", "."], input=json.dumps(fm), capture_output=True, text=True).stdout
+    print("---\n# yaml-language-server: $schema=/Users/you/.devwork/_schema/continuity.schema.json\n" + y + "---\n")
+    print(f"# {t.get('task_id')}: {todo('title')}\n")
+    print(f"**Where we are.** {todo(f'what the session closed, each claim citing its logbook id in {sealed + 1}-{last}; cite, never retell')}\n")
+    print(f"**What is next.** {t['next_step']}\n")
+    print("## Receiver verdict — next session\n\n`/Users/you/.devwork/tasks/brain-continuity-20260923/srs.md` C3. **Not yet filled.** "
+          "Run the checks in `verify` and `encuadre traps`, and replace this section before the first productive action.")
+    sys.exit(0)
+
+with tempfile.TemporaryDirectory() as d:
+    fm = subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", arg], capture_output=True, text=True).stdout
+    open(f"{d}/c.json", "w").write(fm or "{}")
+    if subprocess.run(["check-jsonschema", "--schemafile", SCHEMA, f"{d}/c.json"], capture_output=True).returncode != 0:
+        sys.exit(f"[X] {arg} fails task-doc.schema.json: no badge, no dispatch; rebuild the context.md first (D5)")
+b = json.loads(fm)
+line = lambda label, v: print(f"{label}: {v}") if v not in (None, "", []) else None
+print(f'<badge task="{b["task_id"]}" source="{os.path.abspath(arg)}">')
+line("mission", b.get("para"))
+line("role", b.get("role"))
+line("world", " — ".join(x for x in (b.get("project_id"), b.get("world_doc")) if x))
+line("entity", b.get("entity"))
+line("ticket", b.get("ticket_ref"))
+line("state", b.get("state"))
+line("where we are", b.get("where_we_are"))
+line("next step", b.get("next_step"))
+line("done when", b.get("done_when"))
+line("route", " -> ".join(b.get("route") or []))
+line("out of scope", b.get("out_of_scope"))
+line("neighbours", ", ".join(b.get("neighbours") or []))
+print("The context.md above holds the detail. Do not re-derive what this badge states; read further only for what it lacks.")
+print("</badge>")
