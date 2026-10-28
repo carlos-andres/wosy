@@ -12,7 +12,7 @@ owner: WOSY / brain detect (R8)
 
 ## 1. Why this exists (W-03 evidence)
 
-A CSV under `.devwork/data/acme/marketfeed/<dealer>.csv` had an `mtime` of today but did NOT reflect production truth — prod uses a different path on a different worker host. The operator drew a wrong-direction conclusion from a fresh-looking local snapshot.
+A CSV under `.devwork/data/acme/marketfeed/<merchant>.csv` had an `mtime` of today but did NOT reflect production truth — prod uses a different path on a different worker host. The operator drew a wrong-direction conclusion from a fresh-looking local snapshot.
 
 **Failure mode:** `ls -la` shows recent files → "data must be current" → wrong conclusion. Mtime is not provenance. A local copy is not prod truth.
 
@@ -69,7 +69,7 @@ notes: <free text or omit>                  # OPTIONAL
 
 ```markdown
 ---
-origin: https://acme.example/dealer-export
+origin: https://acme.example/merchant-export
 captured_at: 2026-05-26
 captured_by: manual download by operator
 is_production: false
@@ -77,15 +77,15 @@ prod_truth_table: feed_item_hash.last_seen_at
 encoding: latin1
 staleness_threshold_days: 7
 notes: |
-  Local copies of per-dealer Acme exports. Prod consumes these via
+  Local copies of per-merchant Acme exports. Prod consumes these via
   the worker host at /var/spool/feeds/ — those mtimes are authoritative,
   not these. Refresh with: scripts/download-acme-exports.sh
 ---
 
-# Acme dealer exports — local snapshot
+# Acme merchant exports — local snapshot
 
-These CSVs are dealer-keyed exports from acme.example. Each file is named
-`<dealer_stock_id>.csv`. Latin-1 encoded.
+These CSVs are merchant-keyed exports from acme.example. Each file is named
+`<merchant_stock_id>.csv`. Latin-1 encoded.
 
 Prod truth: `feed_item_hash.last_seen_at` (per item, not per file).
 ```

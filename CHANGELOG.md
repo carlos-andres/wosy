@@ -4,6 +4,21 @@ All notable changes to the WOSY system. Reverse-chronological. One line per chan
 
 The deep changelog (binary shas, gate status, test counts) lives in `docs/WOSY.md` §13.
 
+## 2.0.0 — 2026-10-28
+
+The repo now mirrors the installed system. wosy 1 is on tag `v1-final`.
+
+### Added
+- `claude/`: capped global CLAUDE.md (no rule needs the owner's work setup), Coworker output style, path-scoped rules, agents qa-gate and web-researcher, hooks secret_guard.py, dispatch-bash.sh with stages, validate-bash.sh (refuses every `git push`), skill-consistency.sh, catalogue-loader.sh, session-audit.py, status lines, settings.example.json.
+- `devwork/`: task protocol tools (protocolo, encargo-check, encuadre, plan and briefing checks) and one JSON schema per document kind with example and broken pairs.
+
+### Removed
+- wosy 1 harness: `claude/` agent-* agents, watchdog and brain hooks, 15 skills, `install.sh`, `reference-flags/`, `docs/WOSY.md`.
+
+### Known
+- `brain/smoke-*.sh` still reference wosy 1 files and do not run on 2.0.0; `go test ./...` is the brain check.
+- `devwork/_schema/examples/pallet-brief.example.json` does not pass its schema; it is published as installed.
+
 ## Unreleased — 2026-06-11
 
 ### Added
