@@ -11,7 +11,7 @@ Two parts:
 - **`brain`**, one Go binary, installed once per machine (`~/.local/bin/brain`). `brain version` prints its build.
 - **`brain.db`**, one SQLite store **per project**, at `<project>/.devwork/brain.db`.
 
-It supersedes wosy 1 (the Claude Code harness of CHANGELOG 1.3.x, still under `claude/` in this repo) and the Second Brain, which is now a read-only spec.
+It supersedes wosy 1 (the Claude Code harness of CHANGELOG 1.3.x, now on tag `v1-final`) and the Second Brain, which is now a read-only spec.
 
 The store keeps **where things are and how they connect**: projects, tasks, edges, gotchas, lessons, ruled-out claims, query pointers, scope entries and synonyms. It keeps no detail and no prose. Documents stay in files, and the store points at them.
 
@@ -56,7 +56,7 @@ The store keeps **where things are and how they connect**: projects, tasks, edge
 - the schema cards of the world's scope tables;
 - the query pointers into the library.
 
-The world's runbooks and schema cards were added in commit e563f8d. Its gotchas, lessons and ruled-out rows are the ones whose **text names the term**, not every row filed under the project. On 2026-10-02, `brain pallet a123-irv` returned 2 of the 195 live a123-irv gotchas. When the work needs a project's own rows, ask the store directly:
+The world's runbooks and schema cards were added in commit e563f8d. Its gotchas, lessons and ruled-out rows are the ones whose **text names the term**, not every row filed under the project. On 2026-10-02, `brain pallet feed-alpha` returned 2 of the 195 live feed-alpha gotchas. When the work needs a project's own rows, ask the store directly:
 
 ```
 brain query "SELECT id, severity, body_md FROM gotcha WHERE project_id='<id>' AND superseded_by IS NULL"
@@ -100,7 +100,7 @@ Steps 1 and 5 use the owner's protocol tools (`protocolo`, `briefing-check`, `ge
 - **Start of a task:** `brain pallet <world>`, then the project's `error` gotchas.
 - **A trap found mid-work:** `brain note <project> "<what breaks and how to see it>" --source=<file:line>`.
 - **"Was this already tried?"** `brain query "SELECT claim, negative_evidence FROM ruled_out WHERE project_id='<id>'"`.
-- **A ticket or a dealer:** `brain query "SELECT from_id, rel, to_id FROM edge WHERE to_id='ticket:<KEY>'"`, then pallet the world it points at.
+- **A ticket or a merchant:** `brain query "SELECT from_id, rel, to_id FROM edge WHERE to_id='ticket:<KEY>'"`, then pallet the world it points at.
 
 ## 8. What an adapter does
 

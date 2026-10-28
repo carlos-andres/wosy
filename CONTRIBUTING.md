@@ -1,11 +1,11 @@
 # Contributing to wosy
 
-Thanks for taking a look. wosy is small, opinionated, and shipped from a single repo — the code is also the documentation. Read `docs/WOSY.md` (the operator manual) and `README.md` before opening a PR.
+Thanks for taking a look. wosy is small, opinionated, and shipped from a single repo — the code is also the documentation. Read `README.md` and `docs/README-v2.md` before opening a PR.
 
 ## Before you open an issue
 
 - **Search existing issues** — wosy's surface is small; many "this doesn't work" reports have been seen.
-- **Run the smoke test** — `bash brain/smoke-wosy.sh`. If it fails, paste the full output in the issue.
+- **Run the checks** — `cd brain && go test ./...` and `python3 claude/hooks/secret_guard.py self-test`. If one fails, paste the full output in the issue.
 - **State your environment** — macOS version, bash version (`bash --version`), `brew --version`, `go version` if relevant.
 
 ## Before you open a PR
@@ -13,10 +13,10 @@ Thanks for taking a look. wosy is small, opinionated, and shipped from a single 
 1. **Open an issue first** for anything beyond a typo, comment cleanup, or one-line bug fix. A 10-minute conversation in an issue saves an hour of PR rework.
 2. **Run the test suites:**
    - `cd brain && go test ./...` — the brain Go suite
-   - `bash brain/smoke-wosy.sh` — the watchdog enforcement smoke
+   - `python3 claude/hooks/secret_guard.py self-test` — the secret and PII guard battery
 3. **Add or update tests** for any behavior change. The brain `guard` package especially — every classifier rule has at least one positive and one regression case.
 4. **No machine-specific paths** — no `/Users/<name>/...`, no `~/Documents/<personal-folder>/`. Use `$HOME`, `$WOSY_DEVWORK`, or relative paths.
-5. **No real secrets, tokens, hostnames** in code or commits. The `reference-flags/` and `examples/` files use `<PLACEHOLDER>` patterns — match that convention.
+5. **No real secrets, tokens, hostnames** in code or commits. The `examples/` files and the `/Users/you` paths use `<PLACEHOLDER>` patterns — match that convention.
 
 ## Code conventions
 
