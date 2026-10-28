@@ -1,0 +1,252 @@
+{
+  "outputStyle": "Coworker",
+  "statusLine": {
+    "type": "command",
+    "command": "/Users/you/.claude/statusline/statusline.sh"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(/bin/ls *)",
+      "Bash(/usr/bin/env)",
+      "Bash(/usr/bin/sed -n *)",
+      "Bash(acli *)",
+      "Bash(bat *)",
+      "Bash(cat *)",
+      "Bash(check-jsonschema *)",
+      "Bash(claude mcp *)",
+      "Bash(cmp *)",
+      "Bash(column *)",
+      "Bash(comm *)",
+      "Bash(command *)",
+      "Bash(cut *)",
+      "Bash(date *)",
+      "Bash(difft *)",
+      "Bash(direnv export *)",
+      "Bash(direnv status)",
+      "Bash(duckdb *)",
+      "Bash(echo *)",
+      "Bash(env)",
+      "Bash(eza *)",
+      "Bash(fd *)",
+      "Bash(file *)",
+      "Bash(gdate *)",
+      "Bash(git add *)",
+      "Bash(git blame *)",
+      "Bash(git branch *)",
+      "Bash(git config --get *)",
+      "Bash(git describe *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git ls-files *)",
+      "Bash(git reflog *)",
+      "Bash(git remote *)",
+      "Bash(git rev-parse *)",
+      "Bash(git show *)",
+      "Bash(git stash list *)",
+      "Bash(git status *)",
+      "Bash(git tag --list *)",
+      "Bash(git tag -l *)",
+      "Bash(git tag)",
+      "Bash(go build *)",
+      "Bash(go mod *)",
+      "Bash(gofmt -l *)",
+      "Bash(grep *)",
+      "Bash(gron *)",
+      "Bash(gstat *)",
+      "Bash(head *)",
+      "Bash(hyperfine *)",
+      "Bash(id *)",
+      "Bash(join *)",
+      "Bash(jq *)",
+      "Bash(ls *)",
+      "Bash(md5 *)",
+      "Bash(mkdir *)",
+      "Bash(nl *)",
+      "Bash(php -l *)",
+      "Bash(php -v)",
+      "Bash(phpstan *)",
+      "Bash(pwd)",
+      "Bash(python3 -m json.tool)",
+      "Bash(rg *)",
+      "Bash(rtk diff *)",
+      "Bash(rtk du *)",
+      "Bash(rtk find *)",
+      "Bash(rtk git *)",
+      "Bash(rtk go *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk psql *)",
+      "Bash(rtk read *)",
+      "Bash(rtk wc *)",
+      "Bash(sed -n *)",
+      "Bash(shasum *)",
+      "Bash(sort *)",
+      "Bash(sqlite3 *)",
+      "Bash(sqlite3 --version)",
+      "Bash(stat *)",
+      "Bash(tail *)",
+      "Bash(tesseract *)",
+      "Bash(tr *)",
+      "Bash(type *)",
+      "Bash(uniq *)",
+      "Bash(uv --version)",
+      "Bash(wc *)",
+      "Bash(which *)",
+      "Bash(xcodebuild -list *)",
+      "Read(//private/tmp/**)",
+      "Read(//tmp/**)",
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:support.claude.com)",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(gh pr create *)",
+      "Bash(gh pr merge *)",
+      "Bash(git push *)",
+      "Bash(git push --tags *)",
+      "Bash(rtk git push *)"
+    ],
+    "ask": [
+      "Bash(acli * create *)",
+      "Bash(acli * update *)",
+      "Bash(brew install *)",
+      "Bash(brew remove *)",
+      "Bash(brew uninstall *)",
+      "Bash(brew upgrade *)",
+      "Bash(chmod *)",
+      "Bash(chown *)",
+      "Bash(cp -f *)",
+      "Bash(cp -rf *)",
+      "Bash(dd *)",
+      "Bash(gh api -X DELETE *)",
+      "Bash(gh api -X PATCH *)",
+      "Bash(gh api -X POST *)",
+      "Bash(gh api -X PUT *)",
+      "Bash(gh issue close *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh issue create *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh pr close *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr review *)",
+      "Bash(gh release create *)",
+      "Bash(gh release delete *)",
+      "Bash(gh release edit *)",
+      "Bash(gh workflow disable *)",
+      "Bash(gh workflow enable *)",
+      "Bash(gh workflow run *)",
+      "Bash(git checkout -- *)",
+      "Bash(git clean *)",
+      "Bash(git commit *)",
+      "Bash(git merge *)",
+      "Bash(git rebase *)",
+      "Bash(git reset --hard *)",
+      "Bash(git restore *)",
+      "Bash(git rm *)",
+      "Bash(git tag --delete *)",
+      "Bash(git tag -d *)",
+      "Bash(kill *)",
+      "Bash(killall *)",
+      "Bash(launchctl *)",
+      "Bash(mv *)",
+      "Bash(osascript *)",
+      "Bash(pkill *)",
+      "Bash(rm *)",
+      "Bash(rmdir *)",
+      "Bash(sudo *)",
+      "Bash(rtk git checkout -- *)",
+      "Bash(rtk git clean *)",
+      "Bash(rtk git commit *)",
+      "Bash(rtk git merge *)",
+      "Bash(rtk git rebase *)",
+      "Bash(rtk git reset --hard *)",
+      "Bash(rtk git restore *)",
+      "Bash(rtk git rm *)",
+      "Bash(rtk git tag --delete *)",
+      "Bash(rtk git tag -d *)"
+    ],
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "Notification": [],
+    "PermissionRequest": [],
+    "PostToolUse": [],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/you/.claude/hooks/dispatch-bash.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 /Users/you/.claude/hooks/secret_guard.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 /Users/you/.claude/hooks/secret_guard.py"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 /Users/you/.claude/hooks/session-audit.py"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/you/.claude/hooks/skill-consistency.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "^(startup|clear)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/you/.claude/hooks/catalogue-loader.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [],
+    "StopFailure": [],
+    "SubagentStop": [],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 /Users/you/.claude/hooks/secret_guard.py"
+          }
+        ]
+      }
+    ]
+  }
+}
