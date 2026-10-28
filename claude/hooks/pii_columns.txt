@@ -1,0 +1,17 @@
+# Example subset. Generate your own from your schema map: column<TAB>family.
+access_token	cred
+account_number	account
+address	address
+address2	address
+api_key_value	cred
+api_token	cred
+card_number	card
+dob	birth
+email	email
+first_name	name
+ip_address	ip
+last_name	name
+password	cred
+phone	phone
+ssn	natid
+token	cred
