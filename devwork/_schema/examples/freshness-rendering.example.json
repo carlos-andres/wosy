@@ -1,0 +1,32 @@
+{
+  "kind": "freshness-rendering",
+  "policy": { "high_days": 7, "medium_days": 30 },
+  "claims": [
+    {
+      "text": "AER baseline. Reference merchant, inventory and AER triplets known good at audit time.",
+      "last_verified_at": "2026-05-21",
+      "corrected_at": null,
+      "superseded_text": null,
+      "anchor": {
+        "kind": "path_line",
+        "value": "/Users/you/work/umbrella/.devwork/connectors/projects/feed-alpha/master.md:164"
+      },
+      "canaries": [
+        { "label": "merchant 600030031", "expect": "aer.reference_id 21663 / inventory.inventory_id 34724", "note": null },
+        { "label": "merchant 600021874", "expect": "aer.reference_id 22573 / inventory.inventory_id 30732", "note": null },
+        { "label": "merchant 600031724", "expect": "aer.reference_id 24689 / inventory.inventory_id 35309", "note": "Bluegrass. NOT in the local merchant table, prod-only." }
+      ]
+    },
+    {
+      "text": "checkRequiredParams validates the REQUIRED_PARAMS list POST-transform, and it holds SEVEN entries: category, manufacturer, model, vin, status, stock, condition.",
+      "last_verified_at": "2026-09-15",
+      "corrected_at": "2026-09-15",
+      "superseded_text": "REQUIRED_PARAMS holds four entries.",
+      "anchor": {
+        "kind": "path_line",
+        "value": "api-service/app/Services/Integration/Transaction/Adapter/FeedCo/Inventory.php:25-33"
+      },
+      "canaries": null
+    }
+  ]
+}

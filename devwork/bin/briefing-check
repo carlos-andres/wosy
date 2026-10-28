@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""briefing-check: srs C1 and C2 over one briefing (logbook 330), plus S0 its kind's schema. Read-only.
+
+  briefing-check <next-session-prompt.md> [--logbook <jsonl>] [--store <db>]
+
+A claim is the description, each locked item and each paragraph of **Where we are** (old Spanish label **En qué quedamos**
+still read); verify, first_action and **What is next** are commands or plan, not state. C1: every claim cites a parenthesised logbook id, (logbook 318) or
+(318, 319), and every id it cites exists in the ledger beside the briefing. C2: no sentence of a claim sits 0.8
+inside a store row, and no claim writes a figure next to a store noun (the shape lives in verify.expect only).
+exit 0 when both hold, 1 otherwise.
+"""
+import json, os, re, sqlite3, subprocess, sys
+
+args = sys.argv[1:]
+if args and args[0] in ("-h", "--help"):
+    print(__doc__)
+    sys.exit(0)
+if not args or args[0].startswith("-") or not os.path.isfile(args[0]):
+    sys.exit(__doc__)
+path = args[0]
+log = args[args.index("--logbook") + 1] if "--logbook" in args else os.path.join(os.path.dirname(path), "logbook.jsonl")
+db = args[args.index("--store") + 1] if "--store" in args else "/Users/you/work/umbrella/.devwork/brain.db"
+
+fm = json.loads(subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", path], capture_output=True, text=True).stdout or "{}")
+text = open(path, encoding="utf-8").read()
+body = text.split("\n---\n", 1)[1] if text.startswith("---") else text
+claims = [("description", fm.get("description") or "")] + [(f"locked[{i}]", x) for i, x in enumerate(fm.get("locked") or [])]
+state = re.search(r"\*\*(?:Where we are|En qu[ée] quedamos)\.?\*\*.*?(?=\n\*\*(?:What is next|Qu[ée] sigue)|\n## |\Z)", body, re.S)
+if state:
+    claims += [(f"body[{i}]", p.strip()) for i, p in enumerate(re.split(r"\n\s*\n", state.group(0))) if p.strip()]
+
+ids = set()
+if os.path.exists(log):
+    # Ledgers that predate the numeric suffix carry ids like 20260930-delta (manufacturer task,
+    # 20 events); they cannot be cited by number, so they are skipped, not fatal (2026-10-22).
+    ids = {int(s) for l in open(log, encoding="utf-8") if l.strip()
+           for s in [json.loads(l)["id"].rsplit("-", 1)[1]] if s.isdigit()}
+
+def cited(c):
+    out = []
+    for g in re.findall(r"\(([^()]*)\)", c):
+        if "logbook" in g or re.fullmatch(r"\s*\d{1,4}(?:\s*(?:,|to|and|y|a)\s*\d{1,4})*\s*", g):
+            out += [int(x) for x in re.findall(r"\b\d{1,4}\b", g)]
+    return out
+
+STOP = set("the a an and or of to in on at for by with from as is are was be it its this that not no only one per via "
+           "el la los las de del en y o un una que se su por con para es son no".split())
+toks = lambda s: {w for w in re.sub(r"[^\w\s]", " ", s.lower()).split() if w not in STOP and len(w) > 1}
+con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+rows = [(f"gotcha:{i}", toks(b)) for i, b in con.execute("SELECT id, body_md FROM gotcha WHERE superseded_by IS NULL")]
+rows += [(f"lesson:{i}", toks(" ".join(x or "" for x in r))) for i, *r in con.execute(
+    "SELECT id, symptom_effect, operating_rule FROM lesson WHERE superseded_by IS NULL")]
+rows += [(f"scope:{v}", toks(f"{v} {n or ''}")) for v, n in con.execute("SELECT value, notes FROM scope_entry")]
+rows += [(f"stage:{p}/{o}", toks(f"{n} {d or ''}")) for p, o, n, d in con.execute("SELECT project_id, ord, name, description FROM pipeline_stage")]
+rows += [(f"ruled_out:{i}", toks(c)) for i, c in con.execute("SELECT id, claim FROM ruled_out")]
+COUNT = re.compile(r"\b\d[\d,.]*\s+(?:gotchas?|lecciones|lessons?|aristas|edges|filas|rows|tareas|tasks|descartes|ruled_out)\b", re.I)
+
+bad = 0
+print(f"== {path}: {len(claims)} claims, ledger {os.path.basename(log)} ({len(ids)} ids) ==")
+# S0: the frontmatter validates against its kind's schema when one exists (continuity, factory logbook 148).
+schema = os.path.join("/Users/you/.devwork/_schema", f"{fm.get('kind')}.schema.json")
+if os.path.isfile(schema):
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as t:
+        json.dump(fm, t)
+    r = subprocess.run(["check-jsonschema", "--schemafile", schema, t.name], capture_output=True, text=True)
+    os.unlink(t.name)
+    bad |= r.returncode != 0
+    print(f"  [{'OK' if r.returncode == 0 else 'FAIL'}] S0 {os.path.basename(schema)}"
+          + ("" if r.returncode == 0 else " " + " | ".join(l.strip() for l in r.stdout.splitlines() if "::" in l)[:300]))
+# S1: encuadre continuity marks what only the model can write; none may be left (factory logbook 152).
+left = text.count("TODO(model)")
+bad |= left > 0
+print(f"  [{'OK' if not left else 'FAIL'}] S1 {left} TODO(model) left")
+for k, c in claims:
+    refs = cited(c)
+    c1 = "no logbook id" if not refs else (f"unresolved {sorted(set(r for r in refs if r not in ids))}" if any(r not in ids for r in refs) else "")
+    c2 = [f"restates {rk}" for s in re.split(r"(?<=[.;:])\s+", c) if len(st := toks(s)) >= 8
+          for rk, rt in rows if len(st & rt) / len(st) >= 0.8]
+    c2 += [f"store figure '{m}'" for m in COUNT.findall(c)]
+    ok = not c1 and not c2
+    bad |= not ok
+    print(f"  [{'OK' if ok else 'FAIL'}] {k} ids {refs[:6]}{' C1 ' + c1 if c1 else ''}{' C2 ' + '; '.join(c2[:3]) if c2 else ''}")
+print("== changed: nothing (read-only) ==")
+sys.exit(1 if bad else 0)

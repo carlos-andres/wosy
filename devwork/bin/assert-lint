@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""assert-lint <file>... : flag a --verify assertion that pins live state to a literal (assert-lint-20261003).
+
+Scans the body of verify() in a shell applier, and the whole of a Python check. A guard may pin exact state, since it
+runs once before the apply; a verify runs again after other tasks did their work, so it must test the property.
+  R1  a literal count and a noun inside a search pattern          rg -q '... 24 query pointers'
+  R2  a command output compared for equality with a list literal   [ "$(cmd)" = "DUP<TAB>a DUP<TAB>b " ]
+  R3  a search pattern that pins a living-state field's text       rg -q '^next step: .*Q2 to Q7'
+  R4  a Python count compared with == to an integer               (name, len(os.listdir(d)), 38, "==")
+A line that pins on purpose (a frozen fixture, a frozen document) carries `# lint:fixed <why>`, or, when it ends in a
+line continuation, is listed in assert-lint.allow beside this script: <path suffix> TAB <substring of the line> TAB <why>.
+Exit 1 when any line is flagged, 0 otherwise. Prints file:line, the rule and the line.
+"""
+import os, re, sys
+
+ALLOW_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "assert-lint.allow")
+ALLOW = [l.split("\t")[:2] for l in (open(ALLOW_FILE).read().split("\n") if os.path.exists(ALLOW_FILE) else [])
+         if l.strip() and not l.startswith("#") and l.count("\t") >= 2]
+
+SEARCH = re.compile(r"\b(?:rg|grep)\b[^|;&]*?(['\"])(.+?)\1")
+R1 = re.compile(r"(?<![\w\[\]{}+*?\\-])[1-9]\d* (?!days\b|lines?\b)[a-z_]+")  # a literal 0 asserts none, a property
+R2 = re.compile(r"\[ \"\$\(.+\)\" = \"([^\"$]*)\" \]")
+R3 = re.compile(r"\b(?:next step|where we are|where_we_are|next_step|state):")
+# a count of the disk or the store, not a unit test's len() on a fixed input (check-tables.py, 2026-10-03)
+R4 = re.compile(r"(?:,\s*\d+\s*,\s*[\"']==[\"'])|(?:(?:len\((?:os\.listdir|glob)|count\(\*\)).*==\s*\d+)")
+
+def verify_body(lines):
+    """Line numbers inside `verify() {` ... the next line that is exactly `}`."""
+    inside, out = False, []
+    for n, l in enumerate(lines, 1):
+        if re.match(r"\s*verify\s*\(\)\s*\{", l):
+            inside = True
+            continue
+        if inside and l.rstrip() == "}":
+            inside = False
+        if inside:
+            out.append(n)
+    return out
+
+def scan(path):
+    text = open(path, encoding="utf-8", errors="ignore").read().split("\n")
+    py = path.endswith(".py")
+    rows = range(1, len(text) + 1) if py else verify_body(text)
+    hits = []
+    for n in rows:
+        l = text[n - 1]
+        if "lint:fixed" in l or l.lstrip().startswith("#") or any(path.endswith(p) and s in l for p, s in ALLOW):
+            continue
+        if py:
+            if R4.search(l):
+                hits.append((n, "R4", l))
+            continue
+        for _, pat in SEARCH.findall(l):
+            if R1.search(pat):
+                hits.append((n, "R1", l))
+            elif R3.search(pat) and "$" not in pat.replace("$'", "").rstrip("$"):  # $(...) reads the live value
+                hits.append((n, "R3", l))
+        m = R2.search(l)
+        if m and ("\t" in m.group(1) or len(m.group(1).split()) > 2):
+            hits.append((n, "R2", l))
+    return hits
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        sys.exit(__doc__)
+    bad = 0
+    for p in sys.argv[1:]:
+        for n, rule, l in scan(p):
+            print(f"{p}:{n}\t{rule}\t{l.strip()[:160]}")
+            bad += 1
+    sys.exit(1 if bad else 0)

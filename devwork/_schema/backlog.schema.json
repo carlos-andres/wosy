@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "backlog.schema.json",
+  "title": "devwork · backlog.md — the plan. The backlog IS the plan and is not re-derived.",
+  "type": "object",
+  "required": ["kind", "project_id", "phases", "source_ref"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "backlog" },
+    "project_id": { "type": "string", "minLength": 1 },
+    "rule": {
+      "type": ["string", "null"],
+      "description": "the standing rule that governs how phases close, e.g. every phase closes with its acceptance executed"
+    },
+    "phases": {
+      "type": "array",
+      "description": "ordered. Sequence position is the dependency order.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "state"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "description": "short stable label, e.g. F3" },
+          "name": { "type": "string" },
+          "state": { "enum": ["pending", "in-progress", "blocked", "in-verification", "closed"] },
+          "acceptance": { "type": ["string", "null"], "description": "the command that proves this phase closed, and its expected output" },
+          "gate": { "type": ["string", "null"], "description": "what must be true before this phase may start" },
+          "closed_on": { "type": ["string", "null"], "description": "ISO date; set only when state=closed" }
+        }
+      }
+    },
+    "deferred": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "carried to a later stage. One line each, so the user decides. This is the only artifact where naming excluded work is correct, because here it is scope control rather than a loader priming a model."
+    },
+    "replaces": { "type": ["string", "null"], "description": "DCMI dcterms:replaces" },
+    "isReplacedBy": { "type": ["string", "null"], "description": "DCMI dcterms:isReplacedBy" },
+    "created": { "type": "string" },
+    "updated": { "type": "string" },
+    "source_ref": { "type": "string", "minLength": 1 }
+  }
+}

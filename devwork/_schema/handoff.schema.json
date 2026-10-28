@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "handoff.schema.json",
+  "title": "devwork · handoff-<ISO>-<seq>.md — one session boundary (project_id + task_id are path-derived)",
+  "type": "object",
+  "required": ["kind", "date", "seq", "boundary", "reads", "source_ref"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "handoff" },
+    "date": { "type": "string", "minLength": 1, "description": "ISO; filename-ordered == chronological, so `ls | tail -1` is the latest" },
+    "seq": { "type": "integer", "description": "Nth handoff of that date (filename order)" },
+    "boundary": {
+      "enum": ["clean", "dirty"],
+      "description": "clean = nothing in flight, safe to start fresh. dirty = uncommitted work, paused operation, or contaminated environment. Evidence: 74% of handoffs carry both a mandate and a state recap, so the split is boundary state, not document type."
+    },
+    "dirty_state": {
+      "type": ["array", "null"],
+      "description": "required when boundary=dirty. What a fresh session would otherwise destroy or re-run.",
+      "items": {
+        "type": "object",
+        "required": ["what", "where"],
+        "additionalProperties": false,
+        "properties": {
+          "what": { "type": "string", "description": "uncommitted diff, paused job, mutated env, corrected prior claim" },
+          "where": { "type": "string", "description": "absolute path, host, or branch" },
+          "reversible": { "type": ["boolean", "string", "null"] }
+        }
+      }
+    },
+    "task_id": { "type": ["string", "null"], "description": "folder slug; null for project-level handoff" },
+    "project_id": { "type": ["string", "null"] },
+    "cwd": { "type": ["string", "null"], "description": "absolute path the next session must start from" },
+    "git_ref": { "type": ["string", "null"], "description": "branch@sha at the boundary; empty = session did not ship" },
+    "done_when": { "type": ["string", "null"], "description": "falsifiable close condition carried forward" },
+    "reads": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "ordered absolute paths the next session loads. YAML sequences are ordered by definition, so no rank field. Most consistent component in the corpus: 45 of 60 sampled prompts."
+    },
+    "verify": {
+      "type": ["object", "null"],
+      "required": ["cmd", "expect"],
+      "additionalProperties": false,
+      "description": "legitimacy smoke. A handoff that claims done is verified before anything is built on it.",
+      "properties": {
+        "cmd": { "type": "string" },
+        "expect": { "type": "string", "description": "exact expected output, not a description of it" }
+      }
+    },
+    "prohibitions": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "targeted imperatives ('do not relaunch the loop'). Never a catalogue of non-goals — naming what you will not do supplies vocabulary to hallucinate with."
+    },
+    "replaces": { "type": ["string", "null"], "description": "DCMI dcterms:replaces — path of the handoff this one supersedes" },
+    "isReplacedBy": { "type": ["string", "null"], "description": "DCMI dcterms:isReplacedBy — set when a later handoff supersedes this one" },
+    "created": { "type": "string", "description": "ISO date" },
+    "updated": { "type": "string", "description": "ISO date" },
+    "source_ref": { "type": "string", "minLength": 1 }
+  },
+  "if": { "properties": { "boundary": { "const": "dirty" } } },
+  "then": { "required": ["dirty_state"] }
+}

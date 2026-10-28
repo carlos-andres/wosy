@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kickoff.schema.json",
+  "title": "devwork · 00-README.md — the loader. Names what a fresh session reads, in what order.",
+  "type": "object",
+  "required": [
+    "kind",
+    "description",
+    "reads",
+    "source_ref",
+    "done_when"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "kickoff"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "one line that lets an agent decide whether to open this file. Preloaded for routing, so it carries the whole decision."
+    },
+    "form": {
+      "enum": [
+        "paragraph",
+        "bundle"
+      ],
+      "description": "paragraph = a single pasteable block. bundle = a numbered directory where the numeric prefix IS the read order, so no prose list can drift from the directory."
+    },
+    "project_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cwd": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "absolute path the session starts from"
+    },
+    "reads": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "ordered absolute paths. Pointers, never inlined content."
+    },
+    "verify": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "cmd",
+        "expect"
+      ],
+      "additionalProperties": false,
+      "description": "run before building anything. Proves the state this loader claims is real.",
+      "properties": {
+        "cmd": {
+          "type": "string"
+        },
+        "expect": {
+          "type": "string",
+          "description": "exact expected output"
+        }
+      }
+    },
+    "first_action": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the literal next command or edit, not a description of it"
+    },
+    "done_when": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "falsifiable close condition for the stage this loader opens",
+      "minLength": 1
+    },
+    "locked": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "decisions the fresh session must not re-derive or re-litigate"
+    },
+    "prohibitions": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "targeted imperatives only. Never a non-goals catalogue."
+    },
+    "expires_when": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "condition after which this loader is stale and must not be pasted"
+    },
+    "frozen_copies": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "for form=bundle. Files copied into the bundle, with the live source that wins on conflict.",
+      "items": {
+        "type": "object",
+        "required": [
+          "copy",
+          "live_source"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "copy": {
+            "type": "string"
+          },
+          "live_source": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "disposable_when": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "for form=bundle. When the whole directory can be deleted."
+    },
+    "replaces": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "DCMI dcterms:replaces"
+    },
+    "isReplacedBy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "DCMI dcterms:isReplacedBy"
+    },
+    "created": {
+      "type": "string"
+    },
+    "updated": {
+      "type": "string"
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

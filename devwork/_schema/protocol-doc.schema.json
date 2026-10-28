@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "protocol-doc.schema.json",
+  "title": "devwork · a protocol document, frontmatter only. Its decision graph is the ```yaml graph block, gated by plan-graph.schema.json through .devwork/bin/plan-graph.",
+  "description": "Added 2026-10-02 (factory-redesign logbook 77, gap 5): the protocolo de encuadre is the first instance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "role", "para", "status", "created", "updated"],
+  "properties": {
+    "kind": {"const": "protocol"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "the task that owns the protocol"},
+    "project_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "role": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$", "description": "one line: what the protocol governs"},
+    "para": {"type": "string", "minLength": 1, "description": "the only human field, in Spanish"},
+    "status": {"type": "string", "minLength": 1, "description": "draft or in force, with the logbook ids that ruled it"},
+    "created": {"type": "string", "format": "date"},
+    "updated": {"type": "string", "format": "date"}
+  }
+}

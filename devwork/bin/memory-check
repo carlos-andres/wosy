@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""memory-check: hygiene of one Claude auto-memory folder (factory logbook 148). Read-only, writes nothing, no clock.
+
+  memory-check <memory dir|--auto> [--rules <file> ...] [--days N]
+
+--auto takes the current directory's autoMemoryDirectory from .claude/settings.local.json, else the default folder of
+the Claude home in force (CLAUDE_CONFIG_DIR or ~/.claude): the Claude Code adapter, so protocolo names no Claude home.
+
+FAIL (exit 1): MEMORY.md over 200 lines or 25,000 bytes (Claude Code loads only that much); a memory file missing from
+the index, or an index link to no file; a file without frontmatter name, description and metadata.type.
+WARN (exit 0): a memory sentence whose words sit 70 percent inside one sentence of CLAUDE.md or .claude/rules/
+(it repeats a rule: keep only the why, or delete it); a file whose `modified` is more than N days (default 60) older
+than the newest file of the folder. Default rules: the home CLAUDE.md, the umbrella CLAUDE.md, its .devwork/context.md
+and its .claude/rules/*.md.
+"""
+import glob, json, os, re, sys, datetime
+
+args = sys.argv[1:]
+if args and args[0] == "--auto":   # logbook 163
+    sl = os.path.join(os.getcwd(), ".claude", "settings.local.json")
+    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    args[0] = (json.load(open(sl)).get("autoMemoryDirectory") if os.path.isfile(sl) else None) \
+        or f"{home}/projects/{re.sub(r'[^A-Za-z0-9]', '-', os.getcwd())}/memory"
+if not args or not os.path.isdir(args[0]):
+    sys.exit(__doc__)
+D = args[0]
+U = "/Users/you/work/umbrella"
+rules = args[args.index("--rules") + 1:] if "--rules" in args else \
+    ["/Users/you/.claude/CLAUDE.md", f"{U}/CLAUDE.md", f"{U}/.devwork/context.md"] + sorted(glob.glob(f"{U}/.claude/rules/*.md"))
+rules = [r for r in rules if not r.startswith("--")]
+days = int(args[args.index("--days") + 1]) if "--days" in args else 60
+STOP = set("the a an and or of to in on at for by with from as is are was be it its this that not no only one per via "
+           "el la los las de del en y o un una que se su por con para es son".split())
+toks = lambda s: {w for w in re.sub(r"[^\w\s-]", " ", s.lower()).split() if w not in STOP and len(w) > 1}
+sents = lambda t: [s for s in re.split(r"(?<=[.;:])\s+|\n", t) if s.strip()]
+fail = warn = 0
+def say(level, msg):
+    global fail, warn
+    fail += level == "FAIL"; warn += level == "WARN"
+    print(f"  [{level}] {msg}")
+
+idx_p = os.path.join(D, "MEMORY.md")
+idx = open(idx_p, encoding="utf-8").read() if os.path.isfile(idx_p) else ""
+n, b = idx.count("\n") + (1 if idx and not idx.endswith("\n") else 0), len(idx.encode())
+say("OK" if n <= 200 and b <= 25000 else "FAIL", f"MEMORY.md {n} lines, {b} bytes (cap 200 lines, 25,000 bytes)")
+files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(D, "*.md")) if not f.endswith("/MEMORY.md"))
+links = set(re.findall(r"\]\(([^)]+\.md)\)", idx))
+for f in files:
+    if f not in links:
+        say("FAIL", f"{f} is not in MEMORY.md")
+for l in sorted(links - set(files)):
+    say("FAIL", f"MEMORY.md links {l}, which does not exist")
+corpus = [(os.path.basename(p), toks(s)) for p in rules if os.path.isfile(p)
+          for s in sents(open(p, errors="ignore").read()) if len(toks(s)) >= 5]
+mods = {}
+for f in files:
+    text = open(os.path.join(D, f), encoding="utf-8").read()
+    head, body = (text.split("---", 2)[1:] + ["", ""])[:2] if text.startswith("---") else ("", text)
+    if not all(re.search(rf"^\s*{k}:", head, re.M) for k in ("name", "description", "type")):
+        say("FAIL", f"{f} lacks name, description or metadata.type")
+    m = re.search(r"modified:\s*(\d{4}-\d{2}-\d{2})", head)
+    if m:
+        mods[f] = datetime.date.fromisoformat(m.group(1))
+    dup = sorted({n for st in (toks(s) for s in sents(body) if len(toks(s)) >= 6)
+                  for n, ct in corpus if len(st & ct) / len(st) >= 0.7})
+    if dup:
+        say("WARN", f"{f} repeats a rule of {', '.join(dup)}: keep the why, or delete it")
+if mods:
+    ref = max(mods.values())
+    for f, d in sorted(mods.items()):
+        if (ref - d).days > days:
+            say("WARN", f"{f} modified {(ref - d).days} days before the newest memory")
+print(f"== {len(files)} memories: {fail} FAIL, {warn} WARN; changed: nothing ==")
+sys.exit(1 if fail else 0)

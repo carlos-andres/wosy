@@ -1,0 +1,9 @@
+# assert-lint exceptions: <path suffix> TAB <substring of the flagged line> TAB <why the pin is legitimate>
+# Each pins the output of a frozen input, never live state. Reviewed 2026-10-03 (assert-lint-20261003 logbook 2).
+factory-redesign-20260911/a2-4-apply.sh	3 candidates: 1 kept, 1 dropped	mine-session on hub-a2/mine-*-fixture files, frozen
+factory-redesign-20260911/a2-4-apply.sh	^== 6 turns of Calo	mine-session on hub-a2/mine-transcript-fixture.jsonl, frozen
+factory-redesign-20260911/a2-4-apply.sh	3 candidates: 0 kept, 2 dropped	mine-session on a sed copy of the frozen transcript fixture
+factory-redesign-20260911/a2-5-apply.sh	3 memories: 0 FAIL, 2 WARN	memory-check on hub-a2/memcheck-fixture, frozen
+factory-redesign-20260911/b235-apply.sh	^checked: 1 file	check-sql-headers given one named file; the count is the argument count
+factory-redesign-20260911/n8-apply.sh	copy.sql	encuadre n8 on a fake task folder the verify builds itself
+brain-continuity-20260923/check-loader.py	continents-feed-alpha-20260924.md bytes	a dated snapshot document, frozen by its date

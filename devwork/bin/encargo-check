@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# encargo-check — does a plan meet the four criteria of an encargo (PD26)?
+# usage: encargo-check <task-folder | plan.md | plan.yml>
+# Prints "criterion N<TAB>PASS|FAIL<TAB>detail" for N=1..4. Exit 0 only when all four pass.
+# Earth (PD23): the umbrella, Source, the Obra home, /tmp. Relative or aliased paths (T/, W/,
+# .devwork/) resolve inside the umbrella, so they count as Earth. The protocol route
+# /Users/you/.devwork/_schema and /Users/you/.devwork/bin is readable from Earth (N4).
+# advisor-lab-20261013 FR-007.
+set -u
+PG=/Users/you/work/umbrella/.devwork/bin/plan-graph
+EARTH='^(/Users/you/work/umbrella|/Users/you/work/source|/Users/you/\.claude-work|/tmp)(/|$)'
+ROUTE='^/Users/you/\.devwork/(_schema|bin)(/|$)'
+t=${1:?usage: encargo-check <task-folder|plan.md|plan.yml>}
+
+plan=$t
+if [ -d "$t" ]; then
+  plan=""
+  for f in plan.md plan.yml; do [ -f "$t/$f" ] && { plan=$t/$f; break; }; done
+fi
+if [ -z "$plan" ] || [ ! -f "$plan" ]; then
+  for n in 1 2 3 4; do printf 'criterion %s\tFAIL\tno plan.md or plan.yml in %s\n' $n "$t"; done
+  exit 1
+fi
+
+# The graph as JSON: the ```yaml graph block of plan.md, or the whole plan.yml.
+if [[ $plan == *.md ]]; then
+  graph=$(sed -n '/^```yaml graph/,/^```$/p' "$plan" | sed '1d;$d' | yq -o=json '.tasks')
+else
+  graph=$(yq -o=json '.tasks' "$plan")
+fi
+fail=0
+out() { printf 'criterion %s\t%s\t%s\n' "$1" "$2" "$3"; [ "$2" = PASS ] || fail=1; }
+
+# 1. plan-graph passes and every node has done_when and proof_cmd.
+missing=$(jq -r '[.[] | select((.done_when // "") == "" or (.proof_cmd // "") == "") | .id] | join(",")' <<<"$graph")
+if "$PG" "$plan" >/dev/null 2>&1 && [ -z "$missing" ]; then
+  out 1 PASS "plan-graph ok, $(jq length <<<"$graph") nodes with done_when and proof_cmd"
+else
+  out 1 FAIL "plan-graph or nodes missing done_when/proof_cmd: ${missing:-plan-graph failed}"
+fi
+
+# Absolute paths only; relative and aliased paths are inside the umbrella.
+abs() { rg -o '(~|/)(Users|Volumes|tmp|private|opt|etc|var)/[^ "'"'"';|)&>]*' | sed "s#^~#/Users/you#"; }
+
+# 2. every touches and scope path is inside Earth.
+outside=$(jq -r '.[] | ((.touches // [])[]), (.scope // "")' <<<"$graph" | abs | rg -v "$EARTH" | sort -u | paste -sd, -)
+[ -z "$outside" ] && out 2 PASS "all touches and scope paths on Earth" || out 2 FAIL "outside Earth: $outside"
+
+# 3. every proof_cmd names only Earth paths or the protocol route.
+outside=$(jq -r '.[].proof_cmd // ""' <<<"$graph" | abs | rg -v "$EARTH" | rg -v "$ROUTE" | sort -u | paste -sd, -)
+[ -z "$outside" ] && out 3 PASS "all proof_cmd paths on Earth or the protocol route" || out 3 FAIL "outside Earth: $outside"
+
+# 4. no node asks for new reasoning ([I] proxy: no kind research or synthesize).
+think=$(jq -r '[.[] | select(.kind == "research" or .kind == "synthesize") | .id] | join(",")' <<<"$graph")
+untyped=$(jq -r '[.[] | select(.kind == null) | .id] | length' <<<"$graph")
+if [ -n "$think" ]; then out 4 FAIL "reasoning nodes: $think"
+elif [ "$untyped" -gt 0 ]; then out 4 FAIL "$untyped nodes carry no kind, so the check cannot tell"
+else out 4 PASS "no research or synthesize node"; fi
+
+exit $fail

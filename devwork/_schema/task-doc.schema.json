@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task-doc.schema.json",
+  "title": "devwork · tasks/<id>/context.md — the single task document. Frame plus living state in one frontmatter; the ledger beside it is logbook.jsonl under logbook-event.schema.json.",
+  "description": "Ruled by Calo 2026-09-28 (logbook 187: one document per task, context.md plus status) and 2026-09-29 (logbook 195.6: one logbook.jsonl per task). Dialect kind with role beside it (193), para the only human field (145). The living-state fields keep the names and the enum of status.schema.json so the store import stays a rename. project_id is optional: the tasks with no derivable world keep their gap (leg-8 prohibition), they do not invent one.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "role", "task_id", "root", "para", "state", "where_we_are", "ledger", "created", "updated", "source_ref"],
+  "properties": {
+    "kind": {"const": "task-context"},
+    "role": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$", "description": "one line of prose: what a session opened on this task is for"},
+    "task_id": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "the folder slug, as brain derives it"},
+    "project_id": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "the world, from wosy edge about; absent when no world is derivable"},
+    "ticket_ref": {"type": ["string", "null"], "description": "TICKET-1425 or null"},
+    "task_type": {"enum": ["bug", "feature", "audit", "config"]},
+    "root": {"type": "string", "pattern": "^/", "description": "absolute path of the task folder"},
+    "para": {"type": "string", "minLength": 1, "description": "the bounded objective, written by Calo, in Spanish. The only human field"},
+    "state": {"enum": ["open", "in-progress", "blocked", "in-verification", "closed"]},
+    "where_we_are": {"type": "string", "minLength": 1},
+    "next_step": {"type": ["string", "null"]},
+    "done_when": {"type": ["string", "null"]},
+    "waiting_on": {"type": ["string", "null"]},
+    "entity": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$", "description": "badge (factory-redesign logbook 77): the thing the task is about, one line, e.g. merchant 600031705, source 22199.csv"},
+    "route": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "description": "badge: where to look first, in order; a library query, a runbook or a table, each an absolute path or a name"},
+    "out_of_scope": {"type": "string", "minLength": 1, "description": "badge: what the task does not touch"},
+    "neighbours": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"}, "description": "badge: task ids that share an entity or a ticket with this one, from wosy edge"},
+    "world_doc": {"type": "string", "pattern": "^/.+\\.md$", "description": "badge: absolute path of the world master.md this task runs inside"},
+    "ledger": {"type": "string", "pattern": "^/.*/logbook\\.jsonl$", "description": "absolute path of the task ledger, one event per line under logbook-event.schema.json"},
+    "created": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "updated": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "source_ref": {"type": "string", "minLength": 1, "description": "the status.md or kickstart this document recreates, or the generator"},
+    "replaces": {"type": "string", "minLength": 1},
+    "isReplacedBy": {"type": ["string", "null"]}
+  },
+  "allOf": [
+    {"if": {"properties": {"state": {"const": "blocked"}}, "required": ["state"]}, "then": {"required": ["waiting_on"], "properties": {"waiting_on": {"type": "string", "minLength": 1}}}}
+  ]
+}

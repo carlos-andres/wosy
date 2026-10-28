@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mission-doc.schema.json",
+  "title": "devwork · tasks/<id>/mission-<ws>.md — one mission from HQ to the Obra, frontmatter only. The body follows scaffolds/mission.md: QUESTION, READ, ESTABLISHED FACTS, OUT OF SCOPE, WRITE, RETURN.",
+  "description": "advisor-lab-20261013 FR-001, 2026-10-13. Generalized from the TASK-15993 mission prompts (prompt-ws1.md, prompt-ws3.md, 2026-10-12): one workstream, one question, one output file, an established block. The mission lives in the folder of the Earth task that owns it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "workstream", "task_id", "access", "question", "output", "established", "done_when", "ledger", "created"],
+  "properties": {
+    "kind": {"const": "task-mission"},
+    "workstream": {"type": "string", "pattern": "^(WS[0-9]+[a-z]?|T[0-9]+)$", "description": "WS<n> for a question, T<n> for a node of the task's plan.md graph"},
+    "agent": {"type": "string", "minLength": 1, "description": "Obra agent for --agent (builder, qa-gate, scout, archaeologist, web-researcher); absent = the main session"},
+    "model": {"type": "string", "minLength": 1, "description": "--model alias; for a T<n> mission, the node's tier. obra refuses a mission without it"},
+    "effort": {"enum": ["low", "medium", "high", "xhigh", "max"], "description": "--effort; obra refuses a mission without it"},
+    "advisor": {"type": ["string", "null"], "description": "--advisor model, only when the task needs one; the body must say when to consult it (ticket-1441 logbook 42)"},
+    "tools": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "optional --allowedTools pre-approvals for commands the Obra's auto mode cannot check in advance (a pipe through tee); the flag never restricts, the Obra's settings.json bounds the run (ticket-1441 logbook 43)"},
+    "budget_usd": {"type": "number", "exclusiveMinimum": 0, "description": "--max-budget-usd; default 5"},
+    "task_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$", "description": "the Earth task that owns the mission, e.g. TASK-15993"},
+    "access": {
+      "oneOf": [
+        {"const": "read-only", "description": "the mission writes only its output and its return event"},
+        {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^/.+"}, "description": "absolute paths the mission may write besides its output"}
+      ]
+    },
+    "question": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$", "description": "ONE question, one line"},
+    "output": {"type": "string", "pattern": "^/.+\\.md$", "description": "ONE absolute output file, inside the task folder"},
+    "established": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "description": "facts already settled: do not re-derive, contradict only with a cited line"},
+    "done_when": {"type": "string", "minLength": 1},
+    "ledger": {"type": "string", "pattern": "^/.+/logbook\\.jsonl$", "description": "the task ledger that receives the return event"},
+    "created": {"type": "string", "format": "date"}
+  }
+}

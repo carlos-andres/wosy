@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task.schema.json",
+  "title": "brain · task.md — one quest (the MAP row)",
+  "type": "object",
+  "required": ["id", "project_id", "task_type", "symptom_origin", "state", "where_we_are", "created", "updated", "source_ref"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "description": "folder slug, e.g. apc-600031231-inventory-gap" },
+    "project_id": { "type": "string", "minLength": 1 },
+    "task_type": { "enum": ["bug", "feature", "audit", "config"] },
+    "ticket_ref": { "type": ["string", "null"], "description": "TICKET-1425; 'tarea 1425' resolves here via search" },
+    "symptom_origin": {
+      "type": "string",
+      "minLength": 1,
+      "description": "user's opening phrase VERBATIM, or 'SIN DATOS' — never synthesized. minLength added 2026-09-24: required meant the key was present and not that it said anything, so an empty string passed the gate. Write 'SIN DATOS' rather than nothing."
+    },
+    "state": { "enum": ["open", "in-progress", "blocked", "in-verification", "closed"] },
+    "waiting_on": { "type": ["string", "null"] },
+    "done_when": { "type": ["string", "null"], "description": "acceptance criterion" },
+    "where_we_are": { "type": "string", "minLength": 1, "description": "status trio (1)" },
+    "next_step": { "type": ["string", "null"], "description": "status trio (2)" },
+    "open_questions": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "status trio (3)"
+    },
+    "env_residue": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["scope", "what"],
+        "additionalProperties": false,
+        "properties": {
+          "scope": { "type": "string" },
+          "what": { "type": "string" },
+          "reversible": { "type": ["boolean", "string", "null"], "description": "usually a bool; real rows carry a free-text reversal note, so string is allowed (DDL does not constrain)" }
+        }
+      }
+    },
+    "created": { "type": "string", "minLength": 1, "description": "ISO date" },
+    "updated": { "type": "string", "minLength": 1, "description": "ISO date" },
+    "source_ref": { "type": "string", "minLength": 1 }
+  }
+}

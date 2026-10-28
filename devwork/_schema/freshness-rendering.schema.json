@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "freshness-rendering.schema.json",
+  "title": "devwork · the freshness rendering rule. Every rendered claim carries its date, its anchor, and, when corrected, the version it replaced.",
+  "description": "Not invented here. This formalises the form already hand-written in /Users/you/work/umbrella/.devwork/connectors/projects/feed-alpha/master.md sections d, e and f — a verified date plus canary rows, and an explicit corrected <date>. The prose is better instrumented than the database, whose scope_entry.last_seen has min = max per project. D-4 in context.md section 4a.",
+  "type": "object",
+  "required": ["kind", "policy", "claims"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "freshness-rendering" },
+    "policy": {
+      "type": "object",
+      "required": ["high_days", "medium_days"],
+      "additionalProperties": false,
+      "description": "freshness as configuration, not as a rule someone remembers. second-brain v2 already ships it in meta as freshness_high_days 7 and freshness_medium_days 30. The band is computed from last_verified_at against this policy at render time and is never typed by hand, so no band field exists on a claim.",
+      "properties": {
+        "high_days": { "type": "integer", "minimum": 1 },
+        "medium_days": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/claim" }
+    }
+  },
+  "$defs": {
+    "claim": {
+      "type": "object",
+      "required": ["text", "last_verified_at", "anchor"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "last_verified_at": {
+          "type": "string",
+          "format": "date",
+          "description": "srs.md A6: non-null on every row, and every answer renders it. wosy won on the 2026-09-23 battery by showing this date; v2 lost by asserting confidently over nine days of drift."
+        },
+        "corrected_at": {
+          "type": ["string", "null"],
+          "format": "date",
+          "description": "present when this claim replaced an earlier one. master.md writes it literally as corrected 2026-09-10."
+        },
+        "superseded_text": {
+          "type": ["string", "null"],
+          "description": "what the claim said before corrected_at. Required whenever corrected_at is set, because a store carrying both versions with their dates is safer than one carrying a single clean stale version."
+        },
+        "anchor": {
+          "$ref": "#/$defs/pointer",
+          "description": "what re-verification reads. A claim with no anchor cannot be re-verified, so it decays silently."
+        },
+        "canaries": {
+          "type": ["array", "null"],
+          "description": "the control rows master.md section d already carries: use these when validating new flows. A date with no control is a baseline, not a verification.",
+          "items": {
+            "type": "object",
+            "required": ["label", "expect"],
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "expect": { "type": "string", "minLength": 1 },
+              "note": { "type": ["string", "null"] }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["corrected_at"], "properties": { "corrected_at": { "type": "string" } } },
+          "then": { "required": ["superseded_text"], "properties": { "superseded_text": { "type": "string", "minLength": 1 } } }
+        }
+      ]
+    },
+    "pointer": {
+      "type": "object",
+      "required": ["kind", "value"],
+      "additionalProperties": false,
+      "description": "same shape as logbook-event.schema.json, deliberately.",
+      "properties": {
+        "kind": { "enum": ["path", "path_line", "command", "ticket", "canary"] },
+        "value": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

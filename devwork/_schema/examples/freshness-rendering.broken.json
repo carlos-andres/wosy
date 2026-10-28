@@ -1,0 +1,13 @@
+{
+  "kind": "freshness-rendering",
+  "policy": { "high_days": 7, "medium_days": 30 },
+  "claims": [
+    {
+      "text": "FeedCo CSV column layout depends on WHICH file.",
+      "last_verified_at": "2026-09-10",
+      "corrected_at": "2026-09-10",
+      "anchor": { "kind": "path_line", "value": "api-service/app/.../FeedCoImportData.php:322" },
+      "canaries": null
+    }
+  ]
+}

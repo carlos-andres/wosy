@@ -1,0 +1,13 @@
+# fixtures.txt — the live-fixture registry read by check-protocol.sh P3.
+#
+# A live fixture is NOT a control. A control is synthetic and built to fail. A live fixture is a
+# real working document left unrepaired because it is the only input able to falsify a checker.
+# P3 asserts two things about every fixture a document cites: the do-not-repair marker sits on a
+# line that names the fixture, and the fixture is still broken.
+#
+# This is the DEFAULT registry, used when the document's own folder ships no bin/fixtures.txt.
+# A task folder that registers its own fixtures overrides this file entirely — check-protocol.sh
+# prefers "$BASE/bin/fixtures.txt" and only falls back here.
+#
+# Format: <fixture-file> <checker-under-test>
+# Paths are relative to the DOCUMENT's folder, not to this one.

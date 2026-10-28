@@ -1,0 +1,83 @@
+{
+  "kind": "pallet-brief",
+  "consumer": "fresh-session",
+  "project": "devwork-infra",
+  "task_id": "brain-continuity-20260923",
+  "token_budget": 30000,
+  "delivered": {
+    "tokens": 1360,
+    "rows": null
+  },
+  "gaps": [],
+  "built_from": [
+    { "source": "/Users/you/.devwork/tasks/brain-continuity-20260923/next-session-prompt.md", "statement": null },
+    { "source": "/Users/you/.devwork/tasks/brain-continuity-20260923/kickoff.md", "statement": null },
+    { "source": "/Users/you/.devwork/tasks/brain-continuity-20260923/bitacora.md", "statement": null },
+    { "source": "/Users/you/.devwork/tasks/brain-continuity-20260923/context.md", "statement": null },
+    { "source": "/Users/you/.devwork/tasks/brain-continuity-20260923/plan-amendment-20260924.md", "statement": null },
+    { "source": "/Users/you/.devwork/tasks/brain-continuity-20260923/srs.md", "statement": null }
+  ],
+  "inputs": {
+    "contexto": "The task rebuilds one knowledge store and one session-continuity protocol for the Platform workshop. Phase P00 closed on 2026-09-24 and the remaining debt is three schemas.",
+    "materiales": "The six task artefacts listed in built_from, the live wosy store at /Users/you/work/umbrella/.devwork/connectors/brain.db with 483 rows, and the brain CLI at /Users/you/.local/bin/brain version 0.1.0-p1.",
+    "rol": "Build session, bounded. Calo decides and curates.",
+    "alcance": "Run the baseline probe with its two controls, then write the three D-7 schemas under /Users/you/.devwork/_schema/. Nothing is mined, filled or retired in this leg.",
+    "referencias": [
+      "/Users/you/.devwork/BRUJULA.md",
+      "/Users/you/.devwork/dist/protocol.md",
+      "/Users/you/.devwork/dist/schema.md",
+      "/Users/you/work/umbrella/CLAUDE.md",
+      "/Users/you/.devwork/_scratch/2026-09-24-wosy-usage-patterns.md",
+      "/Users/you/.devwork/tasks/brain-continuity-20260923/battery-run/"
+    ]
+  },
+  "brief": {
+    "de_que_trata": "Deciding what to keep from two generations of a working-but-partial memory system, and writing that decision down with its evidence. wosy is the vehicle and second-brain v2's operation set is the specification.",
+    "porque": "The system works and the cost of keeping it working is the defect. Measured: 873 handoff-shaped files with 1 countersignature, 80.8% read within a median of 1.4 hours, and no measurable effect on the receiver's reconstruction cost. The protocol ends one step too early.",
+    "para_que": "One store per project with an agnostic read and write path, one append-only logbook, and a briefing assembled from that logbook rather than composed at the moment of lowest fidelity.",
+    "en_que_nos_quedamos": "P00 closed on 2026-09-24 by adoption rather than by code review. The baseline probe passed on 2026-09-24 and both its controls went red in the same block, so the instrument discriminates. The store holds 483 rows, scores 6 of 9 on the fact battery and 4 of 15 on the use battery, and owes the three D-7 schemas.",
+    "que_sigue": "Write the three D-7 schemas under /Users/you/.devwork/_schema/ and gate each one with check-jsonschema against a real example and a deliberately broken one in the same block. Then decide the slice unit — concept, field, or merchant/ticket — against ask shapes B, C and F."
+  },
+  "evidence": [
+    {
+      "claim": "The baseline probe passed and both controls went red in the same block, so the instrument discriminates.",
+      "logbook_id": "20260924T160111Z-001"
+    },
+    {
+      "claim": "A delivery that returns entities where the session wanted the wiring is a 0-hit, and one is already recorded on 2026-09-08.",
+      "logbook_id": "20260908-f1"
+    }
+  ],
+  "verify": {
+    "cmd": "cd /Users/you/work/umbrella && brain query \"SELECT project_id, count(*) FROM gotcha GROUP BY 1 ORDER BY 1\"",
+    "expect": "feed-alpha    27\nclients     8\ncollectors  9"
+  },
+  "receiver_verdict": {
+    "confirmed": true,
+    "at": "2026-09-24T16:01:11Z",
+    "note": "Ran from the umbrella with no absolute path typed: three rows matched. Control A from /Users/you refused with no store at \".brain/store.db\" and exited 1. Control B with --store=/Users/you/.devwork/brain.db returned 0 rows."
+  },
+  "destination": null,
+  "route": null,
+  "forbidden": [
+    {
+      "zone": "Reopening the vehicle question.",
+      "negative_evidence": "The 2026-09-23 head-to-head battery: wosy 6 RESPONDIDA with 0 ENGANOSA against v2 4 with 1, diagnosed as staleness. The claim that v2 has no data is wrong and is retracted.",
+      "source_ref": "/Users/you/.devwork/tasks/brain-continuity-20260923/bitacora.md section 6a"
+    },
+    {
+      "zone": "Building a schema or card validator.",
+      "negative_evidence": "check-card already validates a card against context-card.schema.md and refresh-schema already regenerates the database schema documentation.",
+      "source_ref": "/Users/you/work/umbrella/.devwork/bin/"
+    },
+    {
+      "zone": "Re-investigating the feedco createWithImageSoftFail path.",
+      "negative_evidence": "Disproven, and it is the worked example of why this task exists.",
+      "source_ref": "/Users/you/.devwork/tasks/brain-continuity-20260923/kickoff.md"
+    }
+  ],
+  "return_contract": null,
+  "created": "2026-09-24",
+  "updated": null,
+  "source_ref": "_schema/examples/pallet-brief.example.json"
+}

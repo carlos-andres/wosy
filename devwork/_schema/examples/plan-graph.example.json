@@ -1,0 +1,200 @@
+{
+  "tasks": [
+    {
+      "id": "T0",
+      "name": "lock the definition, register the missing schema card",
+      "depends_on": [],
+      "tier": "sonnet",
+      "max_turns": 8,
+      "touches": [
+        "T/context.md",
+        ".devwork/bin/refresh-schema-gen.py"
+      ],
+      "done_when": "context.md carries the closed definition with a file:line per claim and a \"Ruled out\" section covering show_for_integrated and active — DONE, written 2026-09-29. refresh-schema-gen.py gains `hidden_connectors` in both of its per-table dicts (the purpose dict near line 78 and the short-label dict near line 195) so the next full refresh generates the card. The generator needs `mysql --login-path`, which the guard blocks for a session, so the refresh line is HANDED TO THE OWNER, not run: `! .devwork/bin/refresh-schema`.\n",
+      "proof_cmd": "grep -c \"hidden_connectors\" .devwork/bin/refresh-schema-gen.py | grep -qv \"^0$\" && grep -q \"Ruled out\" .devwork/tasks/ticket-2417-lumen-hidden-connectors/context.md && grep -q \"show_for_integrated\" .devwork/tasks/ticket-2417-lumen-hidden-connectors/context.md"
+    },
+    {
+      "id": "T1",
+      "name": "production census — the kill test for H1",
+      "depends_on": [
+        "T0"
+      ],
+      "tier": "sonnet",
+      "max_turns": 8,
+      "touches": [
+        "T/q1-hidden-census.sql",
+        "T/census/"
+      ],
+      "done_when": "q1-hidden-census.sql is handed to the owner and its output saved under census/ as TSV. First line `SET SQL_SELECT_LIMIT = DEFAULT;`. Four statements, in order: (1) SHOW CREATE TABLE hidden_connectors — settles open question 2 and proves the table exists; (2) the H1 join, naming columns explicitly: integration_id, code, module_name, name, active, is_hidden, domain, frequency, last_run_at, uses_staging, include_sold, show_for_integrated; (3) the same join WITHOUT the active=1 filter, so a hidden-but- inactive integration is visible as a separate bucket rather than silently dropped; (4) integration_merchant counts per hidden integration_id, split by active. No `SELECT *`, and no column from integration_client — that table carries connection credentials. The owner is also asked the one question SQL cannot answer: does Lumen's Merchant detail page show this same set?\n",
+      "proof_cmd": "F=.devwork/tasks/ticket-2417-lumen-hidden-connectors/q1-hidden-census.sql; test -s $F && head -1 $F | grep -q \"SET SQL_SELECT_LIMIT = DEFAULT;\" && grep -q \"hidden_connectors\" $F && ! grep -qE \"SELECT \\*|connection_password|connection_username|api_key\" $F",
+      "blocks_on_fail": [
+        "T2",
+        "T3",
+        "T5",
+        "T6",
+        "T7"
+      ]
+    },
+    {
+      "id": "T1b",
+      "name": "census landed and H1 survived",
+      "depends_on": [
+        "T1"
+      ],
+      "tier": "haiku",
+      "max_turns": 4,
+      "touches": [
+        "T/census/hidden-census.tsv",
+        "T/status.md"
+      ],
+      "done_when": "census/hidden-census.tsv is non-empty, its data row count equals the count the owner's run reported for the H1 join, and status.md records the verdict on H1 as SURVIVED or FALSIFIED with the owner's answer about the Lumen page quoted.\n",
+      "proof_cmd": "F=.devwork/tasks/ticket-2417-lumen-hidden-connectors/census/hidden-census.tsv; test -s $F && test \"$(awk \"NR>1\" $F | wc -l | tr -d \" \")\" -gt 0 && grep -qE \"H1 (SURVIVED|FALSIFIED)\" .devwork/tasks/ticket-2417-lumen-hidden-connectors/status.md"
+    },
+    {
+      "id": "T2",
+      "name": "resolve every census row to its code",
+      "depends_on": [
+        "T1b"
+      ],
+      "tier": "opus",
+      "max_turns": 16,
+      "touches": [
+        "T/inventory.md"
+      ],
+      "dispatch": "one RESEARCHER subagent, badge from T/context.md",
+      "done_when": "For every integration_id in census/hidden-census.tsv, inventory.md names: the worker class file resolved through the path convention W/legacy/src/Client/<module_name>.php (runIntegrations.php:112-122) with a line number; its registry key and frequency in W/legacy/connectors-list.php, or the fact that the key is commented out or absent; and the api-side artifacts — the migration that inserted the hidden_connectors row, any Nova action or hardcoded constant naming it. A row with no implementation carries the literal string NO IMPLEMENTATION FOUND plus the rg command that proved it — never an inference. The four retired classes under W/legacy/src/Client/Disabled/ resolve to no namespace the dispatcher can reach, so a census row matching one of them is reported as unreachable, with class_exists cited.\n",
+      "proof_cmd": "P=.devwork/tasks/ticket-2417-lumen-hidden-connectors; for id in $(awk -F\"\\t\" \"NR>1{print \\$1}\" $P/census/hidden-census.tsv); do grep -q \"^### .*\\b$id\\b\" $P/inventory.md || { echo \"MISSING id $id\"; exit 1; }; done"
+    },
+    {
+      "id": "T3",
+      "name": "function description per integration",
+      "depends_on": [
+        "T2"
+      ],
+      "tier": "opus",
+      "max_turns": 18,
+      "touches": [
+        "T/inventory.md",
+        "T/q2-merchant-usage.sql"
+      ],
+      "dispatch": "one RESEARCHER subagent, badge from T/context.md",
+      "done_when": "Each `### ` section in inventory.md carries four labelled lines, each tagged: `Function:` what it sends and to whom, in prose a PM can read; `Transport:` FTP / SFTP / S3 / API push / email, decided from the class — and where the class names none, from the base class W/legacy/src/Client.php:840-844, stated as inherited rather than absent; `Trigger:` the registry frequency, 0 meaning manual or crontab only, cross-read against .devwork/tasks/disable-scheduled-connectors/status.md; `Code:` the file:line list from T2. Where the answer needs integration_client, only metadata columns are read — process_name, file_format, send_file_to, file_generation_method, active — in q2-merchant-usage.sql, which also lists the merchants each hidden integration is enabled for. No connection column.\n",
+      "proof_cmd": "P=.devwork/tasks/ticket-2417-lumen-hidden-connectors; N=$(grep -c \"^### \" $P/inventory.md); test \"$N\" -gt 0 && test \"$(grep -c \"^Function:\" $P/inventory.md)\" -eq \"$N\" && test \"$(grep -c \"^Transport:\" $P/inventory.md)\" -eq \"$N\" && test \"$(grep -c \"^Trigger:\" $P/inventory.md)\" -eq \"$N\" && test \"$(grep -c \"^Code:\" $P/inventory.md)\" -eq \"$N\" && ! grep -qE \"connection_password|connection_username\" $P/q2-merchant-usage.sql"
+    },
+    {
+      "id": "T4",
+      "name": "how a hidden integration reaches a merchant, and how it does not",
+      "depends_on": [
+        "T0"
+      ],
+      "tier": "sonnet",
+      "max_turns": 10,
+      "touches": [
+        "T/findings.md"
+      ],
+      "done_when": "findings.md traces the enable path with a file:line per hop — Nova Merchant detail (Merchant.php:307-320) -> ManageHiddenIntegrations -> MerchantOptionsService:: manageHiddenIntegration():212-239 -> integration_merchant.active + settings — and states the two negative results that decide how the ticket reads: hiding does NOT filter GET /api/connectors (IntegrationRepository.php:29-58 joins no hidden_connectors), and hiding does NOT reach worker-service (zero references). So a hidden integration keeps exporting for every merchant with integration_merchant.active=1. It records the settings encoding asymmetry for T5: written base64-wrapped at MerchantOptionsService.php:230, read bare at ManageHiddenIntegrations.php:109.\n",
+      "proof_cmd": "F=.devwork/tasks/ticket-2417-lumen-hidden-connectors/findings.md; grep -q \"manageHiddenIntegration\" $F && grep -q \"IntegrationRepository.php\" $F && grep -q \"base64_encode\" $F"
+    },
+    {
+      "id": "T5",
+      "name": "settings encoding verdict, from data",
+      "depends_on": [
+        "T4",
+        "T1b"
+      ],
+      "tier": "sonnet",
+      "max_turns": 8,
+      "touches": [
+        "T/q3-settings-shape.sql",
+        "T/findings.md"
+      ],
+      "done_when": "q3-settings-shape.sql reads integration_merchant.settings for the hidden integration_ids and reports only its SHAPE, never a value that could be a credential: LEFT(settings, 12), its LENGTH, and whether it matches a base64 or a bare `a:` serialised prefix. findings.md then carries one line beginning `Settings encoding verdict:` tagged [V] with the owner's output, or [X] not executed with the reason, naming which of the two readers breaks on which shape.\n",
+      "proof_cmd": "P=.devwork/tasks/ticket-2417-lumen-hidden-connectors; head -1 $P/q3-settings-shape.sql | grep -q \"SET SQL_SELECT_LIMIT = DEFAULT;\" && grep -qE \"^Settings encoding verdict:.*(\\[V\\]|\\[X\\])\" $P/findings.md"
+    },
+    {
+      "id": "T6",
+      "name": "cross-check against assets already on disk",
+      "depends_on": [
+        "T1b"
+      ],
+      "tier": "sonnet",
+      "max_turns": 10,
+      "touches": [
+        "T/inventory.md"
+      ],
+      "dispatch": "one RESEARCHER subagent, badge from T/context.md",
+      "done_when": "Each `### ` section gains a `Scheduled today:` line citing a file AND a line number from the assets that already exist — connectors-list.commented.php for the registry key's on/off state, integration_active_counts.tsv for the merchant counts, .devwork/tasks/disable-scheduled-connectors/status.md for the registry and supervisord state as of 2026-08-17, runbook_pass2.md for whether a pass already targeted it. Nothing in those files is regenerated. Where an asset and the fresh census disagree, the census wins and the disagreement is written down with both numbers.\n",
+      "proof_cmd": "P=.devwork/tasks/ticket-2417-lumen-hidden-connectors; N=$(grep -c \"^### \" $P/inventory.md); test \"$(grep -c \"^Scheduled today:\" $P/inventory.md)\" -eq \"$N\""
+    },
+    {
+      "id": "T7",
+      "name": "assemble the answer to the ticket",
+      "depends_on": [
+        "T2",
+        "T3",
+        "T5",
+        "T6"
+      ],
+      "tier": "opus",
+      "max_turns": 14,
+      "touches": [
+        "T/inventory.md",
+        "T/findings.md",
+        "T/JIRA.md",
+        "T/status.md"
+      ],
+      "done_when": "inventory.md is complete — one `### ` section per census row, all five labelled lines present, every claim tagged. findings.md carries the mechanism, the two negative results, a \"Ruled out\" section and \"Open questions\". JIRA.md is a paste-ready comment for TICKET-2417 that answers the ticket's two asks and nothing more: per hidden integration, what it does and where its code is, plus the one caveat the PM needs — that hiding is an admin-visibility flag and does not stop an export. No removal advice. status.md records the H1 verdict, what was executed by whom, and what stayed open.\n",
+      "proof_cmd": "P=.devwork/tasks/ticket-2417-lumen-hidden-connectors; test -s $P/JIRA.md && ! grep -qiE \"TODO|TBD|FIXME\" $P/inventory.md $P/JIRA.md && for id in $(awk -F\"\\t\" \"NR>1{print \\$1}\" $P/census/hidden-census.tsv); do grep -q \"\\b$id\\b\" $P/JIRA.md || { echo \"JIRA missing id $id\"; exit 1; }; done"
+    }
+  ],
+  "risks": [
+    {
+      "id": "RK1",
+      "severity": "high",
+      "what": "The three ids discoverable from migrations (79 RVASAP, 113 BigTex, 122 GoogleMerchant) are a floor, not the set. hidden_connectors has no CREATE TABLE in api-service, so the repo cannot bound it. Shipping the migration-derived list as the answer would under-report.\n",
+      "mitigation": "T1 is a hard gate; T2/T3/T6/T7 all iterate the census TSV and their proof_cmds fail on a missing id."
+    },
+    {
+      "id": "RK2",
+      "severity": "high",
+      "what": "show_for_integrated looks exactly like the hide flag — it is named like one and set to 0 in many integration migrations — but no code reads it. Building the inventory on it would produce a plausible, wrong answer.\n",
+      "mitigation": "Definition closed in context.md with the negative grep; the badge forbids its use; T0's proof_cmd requires the Ruled out section."
+    },
+    {
+      "id": "RK3",
+      "severity": "medium",
+      "what": "safe-updates is set on tc_prod_ro, and its side effect SQL_SELECT_LIMIT=1000 truncates a SELECT in silence. A census that hit the ceiling would look like a clean run.\n",
+      "mitigation": "Every .sql starts with SET SQL_SELECT_LIMIT = DEFAULT;, asserted by each proof_cmd."
+    },
+    {
+      "id": "RK4",
+      "severity": "medium",
+      "what": "integration_client carries connection_password and connection_username. A convenience SELECT * while chasing transport would write a credential into an artifact, and secret_guard would then block reads of that artifact.\n",
+      "mitigation": "T1/T3/T5 proof_cmds grep their own .sql for SELECT * and the credential column names and fail on a hit. Transport is read from the class, not from the connection columns."
+    },
+    {
+      "id": "RK5",
+      "severity": "medium",
+      "what": "A subclass that names no transport reads as \"no export\". Transport is inherited from legacy/src/Client.php, so absence of a keyword usually means FTP via the base class.\n",
+      "mitigation": "T3's done_when requires Transport to be stated as inherited with the base-class file:line, never left blank."
+    },
+    {
+      "id": "RK6",
+      "severity": "low",
+      "what": "The prior assets are dated — pass 1 applied 2026-07-01, registry and supervisord state 2026-08-17. A merchant count read from a TSV may no longer hold.\n",
+      "mitigation": "T6 makes the fresh census authoritative on conflict and requires both numbers to be written down."
+    },
+    {
+      "id": "RK7",
+      "severity": "low",
+      "what": "The ticket's first sentence invites scope creep into deciding which connectors to remove. The owner's call is analysis plus assets; the PM decides.\n",
+      "mitigation": "conventions.never lists removal advice; T7's done_when states 'No removal advice'."
+    }
+  ],
+  "hypothesis": {
+    "id": "H1",
+    "claim": "\"Each hidden integration in Lumen / merchants\" is exactly the row set `integration WHERE active=1 JOIN hidden_connectors ON is_hidden=1`, ordered by name — the options list rendered by Merchant::hiddenIntegrations() at Merchant.php:307-320.\n",
+    "falsified_if": "hidden_connectors is absent from the production schema; or the census returns 0 rows; or the owner reports that Lumen's Merchant detail page shows a set that differs from the census.\n",
+    "on_falsified": "STOP. Re-derive the definition from the Nova Merchant resource against the live admin. Nothing downstream may be written from the three migration-derived ids alone.\n"
+  }
+}

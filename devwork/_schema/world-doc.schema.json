@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world-doc.schema.json",
+  "title": "devwork · the frame documents of a world or a workspace: master.md, architecture.md, connections.md. Frontmatter only; the body is checked by its six sections.",
+  "description": "Ruled by Calo 2026-09-29, logbook 195.2 and 195.3, on the card/1 spine of the umbrella's context-card.schema.md. kind picks the document, role is one line of prose, para is the only human field (logbook 145). additionalProperties is false so a document in the tipo dialect fails (R1 control).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "role",
+    "scope",
+    "root",
+    "para",
+    "created",
+    "updated",
+    "source_ref"
+  ],
+  "properties": {
+    "kind": {
+      "enum": [
+        "master",
+        "architecture",
+        "connections"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\n]+$",
+      "description": "one line of prose: what a session opened on this document is for"
+    },
+    "scope": {
+      "enum": [
+        "world",
+        "workspace"
+      ]
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "the world slug as brain derives it; required when scope is world"
+    },
+    "root": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "absolute path of the world or workspace this document frames"
+    },
+    "para": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the bounded purpose, written by Calo, in Spanish. The only human field"
+    },
+    "created": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "updated": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "where this document came from: the reference it recreates or the generator"
+    },
+    "replaces": {
+      "type": "string",
+      "minLength": 1
+    },
+    "isReplacedBy": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generated": {
+      "type": "boolean"
+    },
+    "generator": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "generated_from": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "world"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "project_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "generated": {
+            "const": true
+          }
+        },
+        "required": [
+          "generated"
+        ]
+      },
+      "then": {
+        "required": [
+          "generator",
+          "generated_from",
+          "content_sha256"
+        ]
+      }
+    }
+  ]
+}

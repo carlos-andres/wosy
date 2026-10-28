@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "spec-doc.schema.json",
+  "title": "devwork · tasks/<id>/spec.md — the spec-kit feature specification, frontmatter only. The body keeps spec-kit's sections; each requirement carries a falsifiable acceptance criterion.",
+  "description": "Ruled by Calo 2026-09-30: spec and plan are the company minimum, built on spec-kit templates with the wosy frontmatter. Replaces SRS.md, spec.md and spec.ears.md for new and migrated tasks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "role", "task_id", "ticket_ref", "para", "created", "updated"],
+  "properties": {
+    "kind": {"const": "task-spec"},
+    "role": {"type": "string", "minLength": 1, "pattern": "^[^\\n]+$", "description": "one line of prose: what this spec requires"},
+    "task_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "project_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "ticket_ref": {"type": ["string", "null"], "pattern": "^[A-Z]+-[0-9]+$"},
+    "supersedes": {"type": "array", "items": {"type": "string", "pattern": "^/.+"}, "description": "absolute paths of the SRS/spec documents this one replaces"},
+    "para": {"type": "string", "minLength": 1, "description": "the only human field, in Spanish"},
+    "created": {"type": "string", "format": "date"},
+    "updated": {"type": "string", "format": "date"}
+  }
+}

@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""protocolo: the protocol runbook (srs C3, E4, E5; logbook 323). Read-only by default.
+
+  protocolo            the C3 share per ISO week: received briefings whose Receiver verdict is filled;
+                       then briefing-check (C1, C2) over every live next-session-prompt.md, reported only
+  protocolo --log      write: append the last week's share as one event to the umbrella logbook
+  protocolo --seal <logbook.jsonl> [--store <db>]   write: stamp, through `brain confirm`, every gotcha:N or lesson:X that a
+                                     verification event since the last seal marks after CONFIRMS, up to the next . or ;
+                                     (srs E1, factory logbook 13, 20), then append
+                                     "N sha256" of its first N lines to logbook.seal beside it (srs B1)
+  protocolo --close <logbook.jsonl> <type> "<text>"   write: P1, close a leg in one call (factory logbook 35):
+                                     build the event (id, ts, project and task_id of the ledger's last line, pointer to
+                                     the briefing beside it), gate it with logbook-event.schema.json, run briefing-check
+                                     on the briefing against the ledger plus that event, and only when both pass append
+                                     it and --seal. Any failure exits 1 and writes nothing
+  protocolo --event <logbook.jsonl> <type> "<text>" [--pointer <path>] [--task <id|none>] [--project <id>]
+                                     write: one mid-leg event (factory logbook 77, protocolo de encuadre N5): built like
+                                     --close, gated by logbook-event.schema.json, appended; no briefing-check, no seal.
+                                     Project and task come from the last line, or from --task and --project, which also
+                                     open an empty ledger; the shared umbrella logbook refuses an event without --task
+                                     (event-task-flag-20261003). Any failure exits 1 and writes nothing
+  protocolo --wrap <context.md> [--transcript <jsonl>] [--memory <dir>]   write: phase 1 of a close, on Calo's words
+                                     "corte limpio", "wrap" or "cerrar aquí" (factory logbook 135, 148): reports encuadre
+                                     traps, mine-session candidates and memory-check, then writes the projected draft
+                                     continuity-draft.md beside the ledger, and nothing else. Phase 2 is the model's and
+                                     Calo's: write every TODO(model), confirm the candidates, archive the live prompt,
+                                     move the draft into next-session-prompt.md, then --close. Update the context.md (D7)
+                                     before --wrap: the draft's focus is its next_step
+  protocolo [--ledger <logbook.jsonl>]   narrow B1 to one ledger
+  protocolo [--store <db>]   R3 against another store (a copy, for the control)
+
+B1 (logbook 334): every line of every logbook.seal must still hash its ledger prefix; a mismatch means the past was
+rewritten. R3 (logbook 337): every task the store marks active has a logbook.jsonl. B3 (the transcript scan for
+unlogged AskUserQuestion answers) was removed by factory logbook 35: a decision counts when it is in logbook.jsonl.
+Calo reopened the transcript as a safety net at factory logbook 143: --wrap runs mine-session, which proposes and
+never writes, so the ledger stays the record.
+
+A received briefing is an archived next-session-prompt-*.md (the live next-session-prompt.md has no receiver
+yet); its week is its `created`. exit 1 when the last week falls below the week before it or below 50% (C3)
+or when a seal breaks (B1).
+"""
+import datetime, glob, hashlib, json, os, re, sqlite3, subprocess, sys, tempfile
+
+ROOTS = ["/Users/you/.devwork/tasks", "/Users/you/work/umbrella/.devwork/tasks"]
+LOG = "/Users/you/work/umbrella/.devwork/logbook.jsonl"
+SCHEMA = "/Users/you/.devwork/_schema/logbook-event.schema.json"
+STORE = "/Users/you/work/umbrella/.devwork/brain.db"
+BC = os.path.join(os.path.dirname(os.path.realpath(__file__)), "briefing-check")
+REPOS = [f"/Users/you/work/source/{r}" for r in ("api-service", "worker-service", "dashboard-app")]
+FLOOR = 0.5
+args = sys.argv[1:]
+opt = lambda k, d=None: args[args.index(k) + 1] if k in args else d
+store = ["--store", opt("--store")] if "--store" in args else []
+prefix = lambda path, n: hashlib.sha256(b"".join(open(path, "rb").readlines()[:n])).hexdigest()
+
+def build_event(led, etype, etext, pointer, verb, d, who=None):
+    """The event a ledger's next line would be: project and task_id of its last line, or who; exits 1 when the schema refuses it."""
+    lines = [l for l in open(led, encoding="utf-8") if l.strip()]
+    last = dict(zip(("project", "task_id"), who)) if who else json.loads(lines[-1])
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ev = {"id": f"{ts}-{len(lines) + 1}", "ts": ts, "type": etype, "project": last["project"], "task_id": last["task_id"],
+          "pointer": {"kind": "path", "value": pointer}, "text": etext}
+    row = json.dumps(ev, ensure_ascii=False) + "\n"
+    with open(f"{d}/ev.json", "w") as t:
+        t.write(row)
+    r = subprocess.run(["check-jsonschema", "--schemafile", SCHEMA, f"{d}/ev.json"], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(f"== {verb}: the event fails logbook-event.schema.json; changed: nothing ==\n{r.stdout[-400:]}")
+    return lines, ev, row
+
+if "--event" in args:
+    i = args.index("--event")
+    if len(args) < i + 4:
+        sys.exit('usage: protocolo --event <logbook.jsonl> <type> "<text>" [--pointer <path>] [--task <id|none>] [--project <id>]')
+    led, etype, etext = args[i + 1:i + 4]
+    pointer = opt("--pointer", os.path.abspath(led))
+    # On the shared umbrella logbook the last line belongs to whoever wrote last, so the event must name its task
+    # (none for a cross-task ruling); a task ledger may still inherit from its own last line (event-task-flag-20261003).
+    task = opt("--task")
+    if task is None and os.path.realpath(led) == os.path.realpath(LOG):
+        sys.exit(f"== event: {LOG} is shared; name the task with --task <id|none>; changed: nothing ==")
+    who = None
+    if task is not None:
+        prev = [l for l in open(led, encoding="utf-8") if l.strip()] if os.path.exists(led) else []
+        project = opt("--project") or (json.loads(prev[-1]).get("project") if prev else None)
+        if not project:
+            sys.exit("== event: an empty ledger needs --project <id>; changed: nothing ==")
+        who = (project, None if task == "none" else task)
+    with tempfile.TemporaryDirectory() as d:
+        _, ev, row = build_event(led, etype, etext, pointer, "event", d, who)
+    with open(led, "a", encoding="utf-8") as f:
+        f.write(row)
+    print(f"== event: appended {ev['id']} ({etype}) to {led} ==")
+    sys.exit(0)
+
+if "--wrap" in args:
+    ctx = os.path.abspath(opt("--wrap") or "")
+    if not os.path.isfile(ctx):
+        sys.exit('usage: protocolo --wrap <context.md> [--transcript <jsonl>] [--memory <dir>]')
+    fm = json.loads(subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", ctx], capture_output=True, text=True).stdout or "{}")
+    root = fm.get("root") or os.path.dirname(ctx)
+    led = fm.get("ledger") or os.path.join(root, "logbook.jsonl")
+    bin_ = os.path.dirname(os.path.realpath(__file__))
+    # The harness's transcript and memory are found by its adapter tools (--latest, --auto), never here (v4-v7, logbook 163).
+    tr, mem = opt("--transcript", "--latest"), opt("--memory", "--auto")
+    print(f"== wrap {fm.get('task_id')}: ledger {led}; transcript {tr}; memory {mem} ==")
+    # L1, on demand at the close and never as a hook (Calo, assert-lint-20261003 logbook 3): this task's verifies
+    checks = sorted(glob.glob(f"{root}/**/*-apply.sh", recursive=True) + glob.glob(f"{root}/**/check-*.py", recursive=True))
+    for title, cmd in (("traps (D12 on STALE)", [f"{bin_}/encuadre", "traps", ctx]),
+                       ("mine-session (Calo confirms each; nothing is written)", [f"{bin_}/mine-session", tr, led]
+                        + (["--candidates", opt("--candidates")] if opt("--candidates") else [])),
+                       ("memory-check", [f"{bin_}/memory-check", mem]),
+                       (f"assert-lint (L1: no verify pins live state to a literal; {len(checks)} files)",
+                        [f"{bin_}/assert-lint", *checks] if checks else ["true"])):
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        print(f"-- {title}: exit {r.returncode}")
+        print((r.stdout + r.stderr).rstrip())
+    draft = os.path.join(os.path.dirname(led), "continuity-draft.md")
+    r = subprocess.run([f"{bin_}/encuadre", "continuity", ctx], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(f"{r.stdout}{r.stderr}== wrap: encuadre continuity failed; changed: nothing ==")
+    open(draft, "w", encoding="utf-8").write(r.stdout)
+    print(f"== wrap: wrote {draft} ({r.stdout.count('TODO(model)')} TODO(model)); next: write them, confirm the candidates, "
+          f"archive next-session-prompt.md, move the draft into it, then protocolo --close {led} verification \"...\" ==")
+    sys.exit(0)
+
+if "--close" in args:
+    i = args.index("--close")
+    if len(args) < i + 4:
+        sys.exit('usage: protocolo --close <logbook.jsonl> <type> "<text>" [--store <db>]')
+    led, etype, etext = args[i + 1:i + 4]
+    brief = os.path.join(os.path.dirname(os.path.abspath(led)), "next-session-prompt.md")
+    with tempfile.TemporaryDirectory() as d:
+        lines, ev, row = build_event(led, etype, etext, brief, "close", d)
+        with open(f"{d}/logbook.jsonl", "w", encoding="utf-8") as t:
+            t.write("".join(lines) + row)
+        r = subprocess.run([sys.executable, BC, brief,
+                            "--logbook", f"{d}/logbook.jsonl"] + store, capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"{r.stdout}{r.stderr}== close: briefing-check failed on {brief}; changed: nothing ==")
+    with open(led, "a", encoding="utf-8") as f:
+        f.write(row)
+    print(f"== close: appended {ev['id']} ({etype}); briefing-check OK; sealing ==")
+    sys.exit(subprocess.run([sys.executable, os.path.realpath(__file__), "--seal", led] + store).returncode)
+
+if "--seal" in args:
+    led = opt("--seal")
+    sealf = os.path.join(os.path.dirname(led), "logbook.seal")
+    prev = int([l for l in open(sealf) if l.strip()][-1].split("\t")[0]) if os.path.exists(sealf) else 0
+    evs = [json.loads(l) for l in open(led, encoding="utf-8").read().splitlines()[prev:] if l.strip()]
+    marked = [seg for e in evs if e.get("type") == "verification" for seg in re.findall(r"\bCONFIRMS\b([^.;]*)", e.get("text", ""))]
+    keys = sorted({k for seg in marked for k in re.findall(r"\b(?:gotcha:\d+|lesson:[\w-]+)", seg)})
+    print(f"== E1: {len(keys)} store rows marked CONFIRMS in verification events since line {prev} ==")
+    for k in keys:
+        r = subprocess.run([os.path.expanduser("~/.local/bin/brain"), "confirm", k] + ([f"--store={opt('--store')}"] if store else []), capture_output=True, text=True,
+                           cwd="/Users/you/work/umbrella")
+        print(f"  [{'STAMPED' if r.returncode == 0 else 'SKIP'}] {k} {(r.stdout or r.stderr).strip()[:120]}")
+    n = sum(1 for _ in open(led, "rb"))
+    line = f"{n}\t{prefix(led, n)}\t{datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+    with open(sealf, "a") as f:
+        f.write(line)
+    print(f"== changed: sealed {led} at {n} lines ==")
+    sys.exit(0)
+
+weeks = {}
+for f in sorted(p for r in ROOTS for p in glob.glob(f"{r}/*/next-session-prompt-*.md")):
+    s = open(f, encoding="utf-8", errors="ignore").read()
+    m = re.search(r'^created:\s*"?(\d{4}-\d{2}-\d{2})', s, re.M)
+    d = datetime.date.fromisoformat(m.group(1)) if m else datetime.date.fromtimestamp(os.stat(f).st_mtime)
+    y, w, _ = d.isocalendar()
+    sec = re.search(r"^## Receiver verdict.*?(?=^## |\Z)", s, re.S | re.M)
+    weeks.setdefault(f"{y}-W{w:02d}", []).append(bool(sec) and "Not yet filled" not in sec.group(0))
+
+print("== C3: received briefings with a filled Receiver verdict, per ISO week ==")
+rate = {k: sum(v) / len(v) for k, v in weeks.items()}
+for k in sorted(weeks):
+    print(f"  {k}\t{sum(weeks[k])} of {len(weeks[k])}\t{rate[k]:.0%}")
+ks = sorted(weeks)
+if not ks:
+    sys.exit("  no received briefing found")
+last, prev = ks[-1], (ks[-2] if len(ks) > 1 else None)
+alarm = [f"below {FLOOR:.0%}"] if rate[last] < FLOOR else []
+if prev and rate[last] < rate[prev]:
+    alarm.append(f"falling from {rate[prev]:.0%} in {prev}")
+print(f"== alarm: {last} at {rate[last]:.0%}: " + ("; ".join(alarm) if alarm else "none") + " ==")
+
+print("== C1, C2: briefing-check over the live briefings (report only) ==")
+for f in sorted(p for r in ROOTS for p in glob.glob(f"{r}/*/next-session-prompt.md")):
+    r = subprocess.run([sys.executable, BC, f], capture_output=True, text=True)
+    fails = [l.strip() for l in r.stdout.splitlines() if "[FAIL]" in l]
+    print(f"  [{'OK' if r.returncode == 0 else 'FAIL'}] {f.split('/tasks/')[1]}" + ("".join(f"\n      {x}" for x in fails[:5])))
+
+print("== B1: ledger seals (append-only proof) ==")
+ledgers = [opt("--ledger")] if "--ledger" in args else \
+    [LOG] + sorted(p for r in ROOTS for p in glob.glob(f"{r}/*/logbook.jsonl"))
+broken = 0
+for led in ledgers:
+    seal = os.path.join(os.path.dirname(led), "logbook.seal")
+    if not os.path.exists(seal):
+        print(f"  [--] {led}: unsealed")
+        continue
+    seals = [l.split("\t") for l in open(seal) if l.strip()]
+    bad = [n for n, h, *_ in seals if prefix(led, int(n)) != h]
+    broken += bool(bad)
+    print(f"  [{'FAIL' if bad else 'OK'}] {led}: {len(seals)} seals" + (f", prefix rewritten at seal N={bad}" if bad else f", last at {seals[-1][0]} lines"))
+
+print("== R3: every live task keeps a ledger (logbook 337) ==")
+con = sqlite3.connect(f"file:{opt('--store', STORE)}?mode=ro", uri=True)
+live = [t for (t,) in con.execute("SELECT id FROM record WHERE type='task' AND status='active' ORDER BY id")]
+noledger = [t for t in live if not any(os.path.exists(f"{r}/{t}/logbook.jsonl") for r in ROOTS)]
+print(f"  [{'FAIL' if noledger else 'OK'}] {len(live)} active tasks, {len(noledger)} without logbook.jsonl" + "".join(f"\n      {t}" for t in noledger))
+
+print("== L1: assert-lint over every task's verifies (report only; assert-lint-20261003) ==")
+checks = sorted(p for r in ROOTS for pat in ("*-apply.sh", "check-*.py") for p in glob.glob(f"{r}/*/**/{pat}", recursive=True))
+r = subprocess.run([os.path.join(os.path.dirname(os.path.realpath(__file__)), "assert-lint"), *checks], capture_output=True, text=True)
+pins = [l for l in r.stdout.splitlines() if l.strip()]
+print(f"  [{'WARN' if pins else 'OK'}] {len(checks)} files, {len(pins)} verify lines pin live state to a literal" + "".join(f"\n      {l[:160]}" for l in pins))
+
+print("== N8: active tasks whose ticket reached origin/production (report only; as of each repo's last fetch) ==")
+for t in live:
+    keys = [k[7:] for (k,) in con.execute("SELECT to_id FROM edge WHERE from_id=? AND to_id LIKE 'ticket:%' AND to_id GLOB 'ticket:[A-Z]*-[0-9]*' ORDER BY 1", (f"task:{t}",))]
+    hits = [f"{k} {os.path.basename(r)} {n}" for k in keys for r in REPOS
+            if (n := len(subprocess.run(["git", "-C", r, "log", "--oneline", "-F", f"--grep={k}", "origin/production"],
+                                        capture_output=True, text=True).stdout.splitlines()))]
+    print(f"  [{'N8?' if hits else '--'}] {t}" + (f": {'; '.join(hits)} commits" if hits else f": {', '.join(keys) or 'no ticket'} not in production"))
+
+if "--log" in args:
+    text = (f"C3 RATE {last}: {sum(weeks[last])} of {len(weeks[last])} received briefings carry a filled receiver verdict "
+            f"({rate[last]:.0%}); alarm: {'; '.join(alarm) or 'none'}. Written by protocolo --log.")
+    with tempfile.TemporaryDirectory() as d:
+        _, ev, row = build_event(LOG, "verification", text, os.path.realpath(__file__), "log", d, ("devwork-infra", "brain-continuity-20260923"))
+    with open(LOG, "a", encoding="utf-8") as f:
+        f.write(row)
+    print(f"== changed: appended {ev['id']} to {LOG} ==")
+else:
+    print("== changed: nothing (read-only; --log appends the week to the umbrella logbook) ==")
+sys.exit(1 if alarm or broken or noledger else 0)
