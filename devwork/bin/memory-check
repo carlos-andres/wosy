@@ -16,9 +16,9 @@ and its .claude/rules/*.md.
 import glob, json, os, re, sys, datetime
 
 args = sys.argv[1:]
+home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
 if args and args[0] == "--auto":   # logbook 163
     sl = os.path.join(os.getcwd(), ".claude", "settings.local.json")
-    home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
     args[0] = (json.load(open(sl)).get("autoMemoryDirectory") if os.path.isfile(sl) else None) \
         or f"{home}/projects/{re.sub(r'[^A-Za-z0-9]', '-', os.getcwd())}/memory"
 if not args or not os.path.isdir(args[0]):
@@ -26,7 +26,7 @@ if not args or not os.path.isdir(args[0]):
 D = args[0]
 U = "/Users/you/work/umbrella"
 rules = args[args.index("--rules") + 1:] if "--rules" in args else \
-    ["/Users/you/.claude/CLAUDE.md", f"{U}/CLAUDE.md", f"{U}/.devwork/context.md"] + sorted(glob.glob(f"{U}/.claude/rules/*.md"))
+    [f"{home}/CLAUDE.md", f"{U}/CLAUDE.md", f"{U}/.devwork/context.md"] + sorted(glob.glob(f"{U}/.claude/rules/*.md"))
 rules = [r for r in rules if not r.startswith("--")]
 days = int(args[args.index("--days") + 1]) if "--days" in args else 60
 STOP = set("the a an and or of to in on at for by with from as is are was be it its this that not no only one per via "

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "rule.schema.json",
   "title": "devwork · .claude/rules/<topic>.md — one rule file, one topic. Claude Code strips this frontmatter before loading, so it costs no context.",
-  "description": "Ruled by Calo 2026-09-29, logbook 213.4: the runbook spine with kind rule. role is one line of prose, para is the only human field (145), additionalProperties false.",
+  "description": "Ruled by the owner 2026-09-29, logbook 213.4: the runbook spine with kind rule. role is one line of prose, para is the only human field (145), additionalProperties false.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -32,7 +32,7 @@
     "para": {
       "type": "string",
       "minLength": 1,
-      "description": "the bounded purpose, written by Calo, in Spanish. The only human field"
+      "description": "the bounded purpose, written by the owner, in Spanish. The only human field"
     },
     "created": {
       "type": "string",

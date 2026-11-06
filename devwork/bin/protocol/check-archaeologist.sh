@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/bash
+#!/usr/bin/env bash
 # Does each recovery command in the graph actually answer its hole type?
 #
 # `_scratch/grafo-continuidad-20260916.md` assigns a command to five hole types. Nothing had ever
@@ -8,6 +8,7 @@
 # command that always returns something answers nothing.
 set -uo pipefail
 D=/Users/you/.devwork
+CC_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 ok=0; bad=0
 # The miss pattern is generated at run time. A literal written here would be found in this
 # very file, and the control would report a false hit against itself. Measured 2026-09-16.
@@ -34,8 +35,8 @@ row content_search \
   "rg -l \"\$NOPE\" $D/bin"
 
 row transcript_memory \
-  "duckdb -csv -noheader -c \"SELECT json_extract_string(c,'\\\$.input.file_path') FROM (SELECT unnest(json_extract(json,'\\\$.message.content[*]')) c FROM read_ndjson_objects('/Users/you/.claude/projects/**/*.jsonl')) WHERE json_extract_string(c,'\\\$.input.file_path') LIKE '%BRUJULA%' LIMIT 3\"" \
-  "duckdb -csv -noheader -c \"SELECT json_extract_string(c,'\\\$.input.file_path') FROM (SELECT unnest(json_extract(json,'\\\$.message.content[*]')) c FROM read_ndjson_objects('/Users/you/.claude/projects/**/*.jsonl')) WHERE json_extract_string(c,'\\\$.input.file_path') LIKE '%\$NOPE%' LIMIT 3\""
+  "duckdb -csv -noheader -c \"SELECT json_extract_string(c,'\\\$.input.file_path') FROM (SELECT unnest(json_extract(json,'\\\$.message.content[*]')) c FROM read_ndjson_objects('${CC_HOME}/projects/**/*.jsonl')) WHERE json_extract_string(c,'\\\$.input.file_path') LIKE '%BRUJULA%' LIMIT 3\"" \
+  "duckdb -csv -noheader -c \"SELECT json_extract_string(c,'\\\$.input.file_path') FROM (SELECT unnest(json_extract(json,'\\\$.message.content[*]')) c FROM read_ndjson_objects('${CC_HOME}/projects/**/*.jsonl')) WHERE json_extract_string(c,'\\\$.input.file_path') LIKE '%\$NOPE%' LIMIT 3\""
 
 # The archaeologist's job is to ANSWER the question, not to make the answer good. An earlier version
 # of this row asserted `CHAIN MATCHES`, so a genuinely red chain read as a broken command. Measured

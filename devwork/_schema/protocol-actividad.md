@@ -20,7 +20,7 @@ HQ   3 HORIZONTE    context.md                          gate: task-doc, encuadre
 HQ   4 SPEC+PLAN    spec.md, plan.md                    gate: spec-doc, plan-graph
         │
         ├─ ¿dónde vive el trabajo?
-        │    sistema o Combat → HQ hace 5 y 6 con sus subagentes (qa-gate revisa)
+        │    sistema o the data volume → HQ hace 5 y 6 con sus subagentes (qa-gate revisa)
         │    Tierra (umbrella/Source) → ¿encargo o misión?
         │
         │    encargo-check <plan> = exit 0  → ENCARGO: la Obra corre el plan entero
@@ -42,7 +42,8 @@ HQ   7 CIERRE       entregable, sello del ledger, next-session-prompt.md
 
 ## Rules
 
-- Earth check before the Obra branch: the task folder must be under /Users/you/work/umbrella or /Users/you/work/source. Outside them (a system task, Combat), HQ runs steps 5 and 6 itself and the Obra route is not considered (Calo, 2026-10-13).
+- Earth check before the Obra branch: the task folder must be under /Users/you/work/umbrella or /Users/you/work/source. Outside them (a system task, the data volume), HQ runs steps 5 and 6 itself and the Obra route is not considered (the owner, 2026-10-13).
 - A small Earth task can skip steps 3 and 4: the mission carries the one question and its done_when (TASK-15993 WS5).
 - When a request has two readings (a full revision or a patch), ask before step 2.
 - The Obra's limit is a blocklist (deny rules), not an allowlist. A runtime-built path in an interpreter is held only by the auto classifier.
+- Every subagent dispatch in steps 1 to 7, in both homes, follows the Subagent classifier in CLAUDE.md: one row per dispatch fixes the agent, the model and the effort. The guard denies a `general-purpose` dispatch with no explicit model.

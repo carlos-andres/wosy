@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "spec-doc.schema.json",
   "title": "devwork · tasks/<id>/spec.md — the spec-kit feature specification, frontmatter only. The body keeps spec-kit's sections; each requirement carries a falsifiable acceptance criterion.",
-  "description": "Ruled by Calo 2026-09-30: spec and plan are the company minimum, built on spec-kit templates with the wosy frontmatter. Replaces SRS.md, spec.md and spec.ears.md for new and migrated tasks.",
+  "description": "Ruled by the owner 2026-09-30: spec and plan are the company minimum, built on spec-kit templates with the wosy frontmatter. Replaces SRS.md, spec.md and spec.ears.md for new and migrated tasks.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "role", "task_id", "ticket_ref", "para", "created", "updated"],

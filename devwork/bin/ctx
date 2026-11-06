@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# ctx — context use of a Claude session, as the statusline measured it.
+# usage: ctx [<session-id>]   the session of the newest transcript for this cwd, else the newest state file
+#        ctx --selftest       fixtures in a temp dir; exit 0 when every case passes
+#        ctx -h               this help
+# Reads <home>/state/context-window-<sid> ("<used> <window size>"), which the statusline of both
+# homes writes. The window size comes from Claude Code itself, so a 1M session prints /1000k.
+set -u
+STATE=${CTX_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state}
+PROJ=${CTX_PROJECTS_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects}
+CWD=${CTX_CWD:-$(pwd)}
+
+case "${1:-}" in
+  -h) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  --selftest)
+    t=$(mktemp -d); trap 'rm -rf "$t"' EXIT; fail=0
+    mkdir -p "$t/state" "$t/proj/-w"
+    echo "352244 1000000" > "$t/state/context-window-aaa"
+    echo "50000 200000" > "$t/state/context-window-bbb"; touch "$t/proj/-w/bbb.jsonl"
+    run() { CTX_STATE_DIR=$t/state CTX_PROJECTS_DIR=$t/proj CTX_CWD=/w "$0" "$@" 2>&1; }
+    c() { if [[ $2 == *"$3"* ]]; then echo "[OK] $1"; else echo "[FAIL] $1: got '$2'"; fail=1; fi; }
+    c "explicit sid, 1M window" "$(run aaa)" "352k/1000k (35%)"
+    c "sid from the newest transcript of the cwd" "$(run)" "50k/200k (25%)"
+    c "unknown sid fails" "$(run zzz; echo "exit=$?")" "exit=1"
+    exit $fail ;;
+esac
+
+sid=${1:-}
+if [ -z "$sid" ]; then
+  d="$PROJ/$(printf '%s' "$CWD" | sed 's/[^a-zA-Z0-9]/-/g')"
+  j=$(/bin/ls -t "$d"/*.jsonl 2>/dev/null | head -1)
+  [ -n "$j" ] && sid=$(basename "$j" .jsonl)
+  [ -n "$sid" ] && [ -f "$STATE/context-window-$sid" ] || sid=$(/bin/ls -t "$STATE" 2>/dev/null | sed -n 's/^context-window-//p' | head -1)
+fi
+f="$STATE/context-window-$sid"
+read -r used size < "$f" 2>/dev/null && [[ $used =~ ^[0-9]+$ && $size =~ ^[1-9][0-9]*$ ]] || { echo "ctx: no state for session '$sid' in $STATE" >&2; exit 1; }
+printf '%dk/%dk (%d%%) session=%s\n' $((used / 1000)) $((size / 1000)) $((used * 100 / size)) "$sid"

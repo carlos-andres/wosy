@@ -20,6 +20,7 @@ You are running workstream <WS> of task <TASK>. <access>. Answer ONE question an
 QUESTION: <the question of the frontmatter, with its context>
 
 READ (only these):
+- <absolute path to pallet-<world>.json>: the world's context, from `brain pallet <world>` run by HQ
 - <absolute path>: <why>
 
 ESTABLISHED FACTS (verify against the source, do not contradict without citing a line):

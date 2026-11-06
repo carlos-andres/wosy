@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/bash
+#!/usr/bin/env bash
 # Toolchain inventory for the continuity work.
 #
 # Every row ties a tool to a need this corpus measured, not to a preference. A tool with no

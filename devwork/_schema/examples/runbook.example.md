@@ -34,7 +34,7 @@ The frontmatter is composed, not authored. Read `decision-badge-contract-2026092
 - `kind`, `created`, `updated`: the convention and the clock. Bump `updated` on every write.
 - `project_id`, `task_id`, `root`: the folder, as `brain` derives them. A task with no derivable world keeps its gap; do not invent one.
 - `role`: what a session opened on this document is for. One line.
-- `para`: Calo's words. Ask, do not paraphrase.
+- `para`: The owner's words. Ask, do not paraphrase.
 - `source_ref`: the document this one recreates, or the generator that produced it. The current file stays as reference until phase F.
 - `state`, `where_we_are`, `next_step`, `done_when`, `waiting_on`: the living state, same names as `status.schema.json`. `blocked` requires `waiting_on`.
 - `ledger`: the absolute path of the task's `logbook.jsonl`.
@@ -54,8 +54,8 @@ check-jsonschema --schemafile $S/<kind>.schema.json $X/bad.json           # must
 ```
 
 4. Run the rendered check of the body. A world document carries the six sections Identity, Pipeline, Scope, Gotchas, Connections, Pipeline conventions / cuidados. A task document carries What it is, Why, What for, Where we are, What is next. Count them with `rg -c '^## '`.
-5. Write a self-verifying applier under `sql/`, rehearse it on a temp copy with `--target`, and hand Calo the `!` line. An agent never writes to `/Volumes/data`, to `~/.local/bin` or to a Claude home.
-6. Record the step in the task ledger before the write that depends on it. A ruling by Calo goes in verbatim.
+5. Write a self-verifying applier under `sql/`, rehearse it on a temp copy with `--target`, and hand the owner the `!` line. An agent never writes to `/Volumes/data`, to `~/.local/bin` or to a Claude home.
+6. Record the step in the task ledger before the write that depends on it. A ruling by the owner goes in verbatim.
 7. Move the task in `plan.yml` with the `yq -i` line the file carries, and run its gate.
 
 ## 4. What does not go in the document

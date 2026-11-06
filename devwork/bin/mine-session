@@ -6,11 +6,11 @@
 --latest takes the newest transcript of the current directory in the Claude home in force (CLAUDE_CONFIG_DIR or
 ~/.claude): this is the Claude Code adapter, so protocolo names no Claude home.
 
-Collects Calo's own words from a Claude Code transcript: plain user turns, AskUserQuestion answers and messages
+Collects the owner's own words from a Claude Code transcript: plain user turns, AskUserQuestion answers and messages
 queued mid-turn. A simple model, through claude -p with no tools and no settings, returns decisions, corrections and
 open questions, each with a verbatim quote. A candidate survives only when its quote is found exact (whitespace
-folded) inside one of Calo's turns and the ledger does not already hold it. Prints one line per survivor,
-"kind<TAB>route<TAB>turn<TAB>quote", then the dropped counts. Calo confirms; protocolo --event writes the ledger,
+folded) inside one of the owner's turns and the ledger does not already hold it. Prints one line per survivor,
+"kind<TAB>route<TAB>turn<TAB>quote", then the dropped counts. The owner confirms; protocolo --event writes the ledger,
 the auto-memory file is written by hand, a store row goes through an applier. --candidates reads the model's JSON
 from a file instead of calling it (test and control). Exit 0 with survivors or none; 1 on a bad input or model error.
 """
@@ -30,6 +30,8 @@ fold = lambda s: re.sub(r"\s+", " ", s).strip()
 
 turns = []
 def add(t):
+    if isinstance(t, list):  # a queued prompt with an image arrives as content blocks (2026-10-30)
+        t = " ".join(b.get("text", "") for b in t if isinstance(b, dict))
     t = (t or "").strip()
     if t and not t.startswith("<") and t not in turns:
         turns.append(t)
@@ -51,7 +53,7 @@ for line in open(tr, encoding="utf-8"):
             r = r if isinstance(r, str) else " ".join(x.get("text", "") for x in r or [] if isinstance(x, dict))
             for a in re.findall(r'"=\s*"(.*?)"(?=\s*(?:,\s*"|\.\s|$))', r, re.S):   # AskUserQuestion: "question"="answer"
                 add(a)
-            m = re.search(r"the user said:\s*\n(.*?)(?:\n\s*\n|\Z)", r, re.S)     # a rejected tool call with Calo's note
+            m = re.search(r"the user said:\s*\n(.*?)(?:\n\s*\n|\Z)", r, re.S)     # a rejected tool call with the owner's note
             if m:
                 add(m.group(1))
 
@@ -93,5 +95,5 @@ for c in cands:
     else:
         kept.append(c)
         print(f"{c.get('kind')}\t{c.get('route')}\t{c.get('turn')}\t{q}")
-print(f"== {len(turns)} turns of Calo; {len(cands)} candidates: {len(kept)} kept, {fake} dropped (quote not verbatim), "
+print(f"== {len(turns)} turns of the owner; {len(cands)} candidates: {len(kept)} kept, {fake} dropped (quote not verbatim), "
       f"{known} dropped (already in the ledger); changed: nothing ==")

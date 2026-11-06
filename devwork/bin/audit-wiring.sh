@@ -116,7 +116,7 @@ if [ "${1:-}" = "--selftest" ]; then
   else printf 'SELFTEST FAILED. %s of 14 controls failed.\n' "${ST_FAIL}"; exit 1; fi
 fi
 
-CLAUDE_HOME="${1:-${CLAUDE_HOME:-${HOME}/.claude}}"
+CLAUDE_HOME="${1:-${CLAUDE_HOME:-${CLAUDE_CONFIG_DIR:-${HOME}/.claude}}}"
 SETTINGS="${CLAUDE_HOME}/settings.json"
 STAGES="${CLAUDE_HOME}/hooks/dispatch-bash.stages"
 LOCAL="${CLAUDE_HOME}/settings.local.json"
