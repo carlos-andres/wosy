@@ -4,6 +4,26 @@ All notable changes to the WOSY system. Reverse-chronological. One line per chan
 
 The deep changelog (binary shas, gate status, test counts) lives in `docs/WOSY.md` §13.
 
+## 2.1.0 — 2026-11-06
+
+### Added
+- `claude/CLAUDE.md`: Subagent classifier, one row per kind of work that fixes the agent, the model and the effort.
+- `claude/hooks/secret_guard.py`: an `Agent|Task` branch enforces that classifier. It reads the table from `~/.claude/CLAUDE.md`, denies a `general-purpose` dispatch off its row and a named agent whose effort is not its row's. `settings.example.json` wires the matcher.
+- `claude/agents/extractor.md`: bulk read-and-extract into one structured file, sonnet, effort low.
+- `devwork/bin/protocolo`: `--open` (start of a leg), `--probe` (load-probe a handoff) and `--selftest`.
+- `devwork/bin/ctx`: context use of a session, as the status line measured it. `devwork/bin/gen-status.py`: `status.md` generated from `context.md`.
+
+### Fixed
+- `secret_guard.py`: `diff` no longer counts as a safe verb. It printed both files, so a `.env` value reached the transcript unredacted. Self-test case added.
+- Scripts that started with `#!/opt/homebrew/bin/bash` now start with `#!/usr/bin/env bash`.
+
+### Changed
+- `claude/statusline/statusline.sh`: adds the directory and git branch segments, and needs bash 5.
+
+### Known
+- `protocolo`, `encargo-check` and the status line still carry the owner's two-home model (a personal home and `~/.claude-work`). With one home, every ledger event reads `home: personal` and the `corp` tag never shows.
+- `protocolo --wrap`, `--open` and `--close` skip `mirror-check`, `bench-develop` and `plan-graph` when they are not installed; this repo ships none of them.
+
 ## 2.0.0 — 2026-10-28
 
 The repo now mirrors the installed system. wosy 1 is on tag `v1-final`.
