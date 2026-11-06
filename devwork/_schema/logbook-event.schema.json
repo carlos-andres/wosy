@@ -33,6 +33,10 @@
       "$ref": "#/$defs/pointer",
       "description": "srs.md B2. An event with no pointer is a memory and not evidence."
     },
+    "home": {
+      "enum": ["personal", "obra"],
+      "description": "the Claude home that wrote the event: personal is /Users/you/.claude (HQ), obra is /Users/you/.claude-work. Omitted when unknown."
+    },
     "supersedes": {
       "type": ["string", "null"],
       "description": "the id this event corrects. Both lines stay in the file, which is D-4: a store carrying both versions with their dates is safer than one carrying a single clean stale version."

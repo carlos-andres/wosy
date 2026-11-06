@@ -2,7 +2,7 @@
 """encuadre: the read side of the protocolo de encuadre (factory logbook 77). Read-only, no clock: same input, same output.
 
   encuadre resolve <term>        G1.N1: the initial file(s) for a world, synonym, task id, ticket key or merchant id,
-                                 one line each "kind<TAB>id<TAB>path". Exit 1 when nothing resolves: ask Calo which one (D3)
+                                 one line each "kind<TAB>id<TAB>path". Exit 1 when nothing resolves: ask the owner which one (D3)
   encuadre badge <context.md>    G1.N6: the badge a subagent receives first (D6), from the task frontmatter.
                                  Exit 1 when the frontmatter fails task-doc.schema.json: no badge, no dispatch (D5)
   encuadre traps <context.md> [--days N]   G1.N7 function 4 (factory logbook 148): the live error gotchas of the task's
@@ -164,9 +164,9 @@ if verb == "resolve":
     for row in out:
         print("\t".join(row))
     if not out and arg.isdigit():
-        sys.exit(f"[X] {arg} is an entity id no task in the store reaches (merchant, feed source or location): hand Calo one query, "
+        sys.exit(f"[X] {arg} is an entity id no task in the store reaches (merchant, feed source or location): hand the owner one query, "
                  "library aer_merchant_by_source_id.sql through encuadre sql and ! mysqlp (D4)")
-    sys.exit(0 if out else f"[X] {arg} resolves to no world, task, ticket or merchant: ask Calo which one and which file is the initial one (D3)")
+    sys.exit(0 if out else f"[X] {arg} resolves to no world, task, ticket or merchant: ask the owner which one and which file is the initial one (D3)")
 
 if verb == "traps":
     import datetime
@@ -217,7 +217,7 @@ if verb == "continuity":
           "traps": traps, "snapshot": f"{sealed + 1}-{last}",
           "first_action": f"Run verify, then /Users/you/.devwork/bin/encuadre traps {os.path.abspath(arg)}: any STALE dispatches "
                           "the archaeologist with the badge before work (D12). Fill the Receiver verdict and write it with "
-                          "/Users/you/.devwork/bin/protocolo --event. Then the focus. Never commit, push or install: hand Calo the line.",
+                          "/Users/you/.devwork/bin/protocolo --event. Then the focus. Never commit, push or install: hand the owner the line.",
           "done_when": t.get("done_when"),
           "locked": prev.get("locked") or [], "prohibitions": prev.get("prohibitions") or [],
           "expires_when": prev.get("expires_when") or todo("the observation that makes this prompt false"),

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "runbook.schema.json",
   "title": "devwork · runbooks/<name>.md — a work runbook under the standard. Frontmatter only; the body is the procedure.",
-  "description": "Ruled by Calo 2026-09-29, logbook 196.1: the world-doc spine with kind runbook. role is one line of prose, para is the only human field (145), additionalProperties false so a tipo: document fails (R1 control). The 17 runbooks that predate the standard are KEEP-AS-REFERENCE (R8) and are not validated.",
+  "description": "Ruled by the owner 2026-09-29, logbook 196.1: the world-doc spine with kind runbook. role is one line of prose, para is the only human field (145), additionalProperties false so a tipo: document fails (R1 control). The 17 runbooks that predate the standard are KEEP-AS-REFERENCE (R8) and are not validated.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -32,7 +32,7 @@
     "para": {
       "type": "string",
       "minLength": 1,
-      "description": "the bounded purpose, written by Calo, in Spanish. The only human field"
+      "description": "the bounded purpose, written by the owner, in Spanish. The only human field"
     },
     "created": {
       "type": "string",

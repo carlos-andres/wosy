@@ -2,11 +2,11 @@
 """gen-context: the whole task context.md, GENERATED from wosy (factory logbook 35; was gen-badge.py, logbook 145,
 A.5): the task-doc frontmatter plus the five body sections, composed through `brain pallet <term>` and the task's
 record row. The frontmatter is the YAML block that task-doc.schema.json gates. The body is one marked block, "Routes
-from wosy" (pallet brief, materials, references, gaps), then the hand-written prose (Calo 2026-10-01, factory logbook
+from wosy" (pallet brief, materials, references, gaps), then the hand-written prose (the owner 2026-10-01, factory logbook
 44, his item 49: wosy holds the recap and the routes, the task keeps the detail). With --keep <context.md> every line
 outside the marked block is carried over unchanged, and every non-empty frontmatter value of that file wins over the
 generated one (only updated and source_ref are regenerated; the pallet's version stays visible in the block); without it the five
-section headings are left for Calo to write. Output always goes to stdout; the file is never edited in place.
+section headings are left for the owner to write. Output always goes to stdout; the file is never edited in place.
 
 Sources, field by field (decision-badge-contract-20260925.md section 6c.3):
   kind, created, updated       convention and the clock
@@ -124,4 +124,4 @@ if prose:
 else:
     print(f"# {a.task_id} — context\n")
     for head in ("What it is", "Why", "What for", "Where we are", "What is next"):
-        print(f"## {head}\n\n[TODO] Calo writes this section.\n")
+        print(f"## {head}\n\n[TODO] the owner writes this section.\n")

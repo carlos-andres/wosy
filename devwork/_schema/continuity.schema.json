@@ -192,7 +192,7 @@
         },
         "from": {
           "type": "string",
-          "pattern": "^(context\\.md next_step|plan [A-Za-z0-9.]+|Calo)$"
+          "pattern": "^(context\\.md next_step|plan [A-Za-z0-9.]+|the owner)$"
         }
       }
     },

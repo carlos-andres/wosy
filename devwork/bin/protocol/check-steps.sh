@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/bash
+#!/usr/bin/env bash
 # Does a handover satisfy the six steps that produce it?
 #
 # The six steps live in `_scratch/pasos-handover-20260916.md`, each with a done_when. Nothing ever
@@ -11,6 +11,7 @@
 # runner and it needs an L1-scoped referent check, which is a different instrument.
 set -uo pipefail
 D=/Users/you/.devwork
+CC_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 DOC="${1:-}"
 [ -n "$DOC" ] || { echo "usage: check-steps.sh <document.md>"; exit 2; }
 [ -f "$DOC" ] || { echo "FATAL: no such document $DOC"; exit 2; }
@@ -61,7 +62,7 @@ if [ -z "$pivot" ] || ! command -v duckdb >/dev/null 2>&1; then
 else
   cand=$(duckdb -csv -noheader -c "
     WITH t AS (SELECT unnest(json_extract(json,'\$.message.content[*]')) AS c
-               FROM read_ndjson_objects('/Users/you/.claude/projects/**/*.jsonl'))
+               FROM read_ndjson_objects('${CC_HOME}/projects/**/*.jsonl'))
     SELECT DISTINCT json_extract_string(c,'\$.input.file_path') AS f FROM t
     WHERE json_extract_string(c,'\$.name') IN ('Read','Edit','Write')
       AND f LIKE '%${slug}%' LIMIT 10" 2>/dev/null | sed '/^$/d')

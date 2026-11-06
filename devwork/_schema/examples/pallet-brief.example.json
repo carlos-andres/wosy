@@ -20,7 +20,7 @@
   "inputs": {
     "contexto": "The task rebuilds one knowledge store and one session-continuity protocol for the Platform workshop. Phase P00 closed on 2026-09-24 and the remaining debt is three schemas.",
     "materiales": "The six task artefacts listed in built_from, the live wosy store at /Users/you/work/umbrella/.devwork/connectors/brain.db with 483 rows, and the brain CLI at /Users/you/.local/bin/brain version 0.1.0-p1.",
-    "rol": "Build session, bounded. Calo decides and curates.",
+    "rol": "Build session, bounded. The owner decides and curates.",
     "alcance": "Run the baseline probe with its two controls, then write the three D-7 schemas under /Users/you/.devwork/_schema/. Nothing is mined, filled or retired in this leg.",
     "referencias": [
       "/Users/you/.devwork/BRUJULA.md",

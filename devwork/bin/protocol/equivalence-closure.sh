@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/bash
+#!/usr/bin/env bash
 # Two copies of check-closure.sh must return the same verdict on the same document.
 #
 # equivalence.sh guards check-protocol.sh and cannot be repointed: it hardcodes OLD at line 18 and

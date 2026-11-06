@@ -1,45 +1,66 @@
 #!/usr/bin/env python3
 """protocolo: the protocol runbook (srs C3, E4, E5; logbook 323). Read-only by default.
 
-  protocolo            the C3 share per ISO week: received briefings whose Receiver verdict is filled;
+  protocolo, -h        this usage and the event types logbook-event.schema.json allows; exit 0
+  protocolo --report   the C3 share per ISO week: received briefings whose Receiver verdict is filled;
                        then briefing-check (C1, C2) over every live next-session-prompt.md, reported only
-  protocolo --log      write: append the last week's share as one event to the umbrella logbook
+  protocolo --log      write: the --report, then append the last week's share as one event to the umbrella logbook
   protocolo --seal <logbook.jsonl> [--store <db>]   write: stamp, through `brain confirm`, every gotcha:N or lesson:X that a
                                      verification event since the last seal marks after CONFIRMS, up to the next . or ;
                                      (srs E1, factory logbook 13, 20), then append
                                      "N sha256" of its first N lines to logbook.seal beside it (srs B1)
   protocolo --close <logbook.jsonl> <type> "<text>"   write: P1, close a leg in one call (factory logbook 35):
-                                     build the event (id, ts, project and task_id of the ledger's last line, pointer to
-                                     the briefing beside it), gate it with logbook-event.schema.json, run briefing-check
-                                     on the briefing against the ledger plus that event, and only when both pass append
-                                     it and --seal. Any failure exits 1 and writes nothing
+                                     refuse unless the ledger's last LOAD-PROBE event for the next-session-prompt.md beside
+                                     it is GO blocking=0 and newer than the prompt's mtime (FR-004); build the event (id, ts,
+                                     project and task_id of the ledger's last line, pointer to the briefing beside it), gate
+                                     it with logbook-event.schema.json, run briefing-check on the briefing against the
+                                     ledger plus that event, and only when both pass append it and --seal. Any failure exits
+                                     1 and writes nothing. After the seal: tasks.md from plan-graph --tasks when plan.md
+                                     exists, status.md from gen-status.py when the store holds the task
+  protocolo --open <context.md>      write: the receiver's start of leg (C3, FR-004): run the verify of the live
+                                     next-session-prompt.md (verify.cmd, stdout against verify.expect), else prompt.md's;
+                                     git status --porcelain -b for each Source repo that plan.md touches or the handoff
+                                     names, against the handoff branch; bench-develop check when the handoff names the
+                                     bench; encuadre traps only when the task changed since the last seal (a ledger event
+                                     after it, context.md newer than logbook.seal, a commit on the handoff branch after
+                                     it). Appends "RECEIVER VERDICT GREEN|RED (C3): ..."; exit 1 on RED
+  protocolo --probe <prompt.md>      write: the load-probe (FR-004): claude -p --allowedTools Read, 600 s, a fixed question;
+                                     the raw answer goes to probe-<UTC>.md beside the prompt and "LOAD-PROBE GO|NO-GO
+                                     blocking=<n>: <prompt>" to the ledger beside it. Exit 0 only on GO with 0 blocking.
+                                     PROTOCOLO_PROBE_CMD replaces the claude command, for --selftest only
+  protocolo --selftest               --close, --probe, --open and --event on scratch fixtures in a temp dir; never a real
+                                     ledger, never claude. Last line "selftest: <n> passed, <m> failed"; exit 0 when m=0
   protocolo --event <logbook.jsonl> <type> "<text>" [--pointer <path>] [--task <id|none>] [--project <id>]
                                      write: one mid-leg event (factory logbook 77, protocolo de encuadre N5): built like
                                      --close, gated by logbook-event.schema.json, appended; no briefing-check, no seal.
                                      Project and task come from the last line, or from --task and --project, which also
                                      open an empty ledger; the shared umbrella logbook refuses an event without --task
                                      (event-task-flag-20261003). Any failure exits 1 and writes nothing
-  protocolo --wrap <context.md> [--transcript <jsonl>] [--memory <dir>]   write: phase 1 of a close, on Calo's words
+  protocolo --wrap <context.md> [--transcript <jsonl>] [--memory <dir>]   write: phase 1 of a close, on the owner's words
                                      "corte limpio", "wrap" or "cerrar aquí" (factory logbook 135, 148): reports encuadre
-                                     traps, mine-session candidates and memory-check, then writes the projected draft
+                                     traps, mine-session candidates, memory-check and the mirror-check summary line (drift
+                                     between the two homes is reported, never fatal), then writes the projected draft
                                      continuity-draft.md beside the ledger, and nothing else. Phase 2 is the model's and
-                                     Calo's: write every TODO(model), confirm the candidates, archive the live prompt,
+                                     the owner's: write every TODO(model), confirm the candidates, archive the live prompt,
                                      move the draft into next-session-prompt.md, then --close. Update the context.md (D7)
                                      before --wrap: the draft's focus is its next_step
-  protocolo [--ledger <logbook.jsonl>]   narrow B1 to one ledger
-  protocolo [--store <db>]   R3 against another store (a copy, for the control)
+  protocolo --report [--ledger <logbook.jsonl>]   narrow B1 to one ledger
+  protocolo --report [--store <db>]   R3 against another store (a copy, for the control)
+
+Every event written (--event, --close, --log) carries home: obra when CLAUDE_CONFIG_DIR resolves to
+/Users/you/.claude-work, personal when it is unset or resolves to /Users/you/.claude, omitted otherwise.
 
 B1 (logbook 334): every line of every logbook.seal must still hash its ledger prefix; a mismatch means the past was
 rewritten. R3 (logbook 337): every task the store marks active has a logbook.jsonl. B3 (the transcript scan for
 unlogged AskUserQuestion answers) was removed by factory logbook 35: a decision counts when it is in logbook.jsonl.
-Calo reopened the transcript as a safety net at factory logbook 143: --wrap runs mine-session, which proposes and
+The owner reopened the transcript as a safety net at factory logbook 143: --wrap runs mine-session, which proposes and
 never writes, so the ledger stays the record.
 
 A received briefing is an archived next-session-prompt-*.md (the live next-session-prompt.md has no receiver
 yet); its week is its `created`. exit 1 when the last week falls below the week before it or below 50% (C3)
 or when a seal breaks (B1).
 """
-import datetime, glob, hashlib, json, os, re, sqlite3, subprocess, sys, tempfile
+import datetime, glob, hashlib, json, os, re, shlex, sqlite3, subprocess, sys, tempfile, time
 
 ROOTS = ["/Users/you/.devwork/tasks", "/Users/you/work/umbrella/.devwork/tasks"]
 LOG = "/Users/you/work/umbrella/.devwork/logbook.jsonl"
@@ -47,10 +68,16 @@ SCHEMA = "/Users/you/.devwork/_schema/logbook-event.schema.json"
 STORE = "/Users/you/work/umbrella/.devwork/brain.db"
 BC = os.path.join(os.path.dirname(os.path.realpath(__file__)), "briefing-check")
 REPOS = [f"/Users/you/work/source/{r}" for r in ("api-service", "worker-service", "dashboard-app")]
+SOURCE = "/Users/you/work/source"
+UBIN = "/Users/you/work/umbrella/.devwork/bin"
+GEN_STATUS = os.path.join(os.path.dirname(os.path.realpath(__file__)), "gen-status.py")
+QUESTION = ("Read the prompt and the files it references; change nothing; report goal, first three actions, BLOCKING gaps, "
+            "non-blocking gaps; end with VERDICT: GO or VERDICT: NO-GO")
 FLOOR = 0.5
 args = sys.argv[1:]
 opt = lambda k, d=None: args[args.index(k) + 1] if k in args else d
 store = ["--store", opt("--store")] if "--store" in args else []
+HOMES = {"/Users/you/.claude": "personal", "/Users/you/.claude-work": "obra"}
 prefix = lambda path, n: hashlib.sha256(b"".join(open(path, "rb").readlines()[:n])).hexdigest()
 
 def build_event(led, etype, etext, pointer, verb, d, who=None):
@@ -60,6 +87,10 @@ def build_event(led, etype, etext, pointer, verb, d, who=None):
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     ev = {"id": f"{ts}-{len(lines) + 1}", "ts": ts, "type": etype, "project": last["project"], "task_id": last["task_id"],
           "pointer": {"kind": "path", "value": pointer}, "text": etext}
+    cfg = os.environ.get("CLAUDE_CONFIG_DIR") or "/Users/you/.claude"
+    home = next((v for k, v in HOMES.items() if os.path.realpath(cfg) == os.path.realpath(k)), None)
+    if home:
+        ev["home"] = home
     row = json.dumps(ev, ensure_ascii=False) + "\n"
     with open(f"{d}/ev.json", "w") as t:
         t.write(row)
@@ -67,6 +98,35 @@ def build_event(led, etype, etext, pointer, verb, d, who=None):
     if r.returncode != 0:
         sys.exit(f"== {verb}: the event fails logbook-event.schema.json; changed: nothing ==\n{r.stdout[-400:]}")
     return lines, ev, row
+
+def append_event(led, etype, etext, pointer, verb):
+    with tempfile.TemporaryDirectory() as d:
+        _, ev, row = build_event(led, etype, etext, pointer, verb, d)
+    with open(led, "a", encoding="utf-8") as f:
+        f.write(row)
+    return ev
+
+frontmatter = lambda p: json.loads(subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", p],
+                                                  capture_output=True, text=True).stdout or "{}")
+epoch = lambda ts: datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()
+
+def blocking(ans):
+    """The blocking gaps a probe answer names: the list items under its BLOCKING heading, or 1 for an inline one."""
+    # ponytail: heading-and-bullet heuristic over free prose; ask the probe for a "blocking=<n>" line if it misreads one.
+    m = re.search(r"^[#*_ \t-]*blocking(?: gaps?)?\b[*_:\s]*?([^\n]*)\n(.*?)(?=^[^\n]*non-?blocking|^[^\n]*VERDICT:|\Z)",
+                  ans, re.I | re.S | re.M)
+    if not m:
+        return 0
+    none = re.compile(r"[*_:\s(]*(none|no\b|0\b|n/a|nil)", re.I)
+    items = [i for i in re.findall(r"^\s*(?:[-*•]|\d+[.)])\s+(.*)", m[2], re.M) if not none.match(i)]
+    inline = m[1].strip(" *_:")
+    return len(items) or int(bool(inline) and not none.match(inline))
+
+if not args or {"-h", "--help"} & set(args) or not {"--report", "--log", "--event", "--close", "--wrap", "--seal",
+                                                     "--open", "--probe", "--selftest", "--ledger", "--store"} & set(args):
+    print(__doc__.rstrip())
+    print("event types: " + ", ".join(json.load(open(SCHEMA))["properties"]["type"]["enum"]))
+    sys.exit(0)
 
 if "--event" in args:
     i = args.index("--event")
@@ -104,10 +164,10 @@ if "--wrap" in args:
     # The harness's transcript and memory are found by its adapter tools (--latest, --auto), never here (v4-v7, logbook 163).
     tr, mem = opt("--transcript", "--latest"), opt("--memory", "--auto")
     print(f"== wrap {fm.get('task_id')}: ledger {led}; transcript {tr}; memory {mem} ==")
-    # L1, on demand at the close and never as a hook (Calo, assert-lint-20261003 logbook 3): this task's verifies
+    # L1, on demand at the close and never as a hook (the owner, assert-lint-20261003 logbook 3): this task's verifies
     checks = sorted(glob.glob(f"{root}/**/*-apply.sh", recursive=True) + glob.glob(f"{root}/**/check-*.py", recursive=True))
     for title, cmd in (("traps (D12 on STALE)", [f"{bin_}/encuadre", "traps", ctx]),
-                       ("mine-session (Calo confirms each; nothing is written)", [f"{bin_}/mine-session", tr, led]
+                       ("mine-session (the owner confirms each; nothing is written)", [f"{bin_}/mine-session", tr, led]
                         + (["--candidates", opt("--candidates")] if opt("--candidates") else [])),
                        ("memory-check", [f"{bin_}/memory-check", mem]),
                        (f"assert-lint (L1: no verify pins live state to a literal; {len(checks)} files)",
@@ -115,7 +175,14 @@ if "--wrap" in args:
         r = subprocess.run(cmd, capture_output=True, text=True)
         print(f"-- {title}: exit {r.returncode}")
         print((r.stdout + r.stderr).rstrip())
-    draft = os.path.join(os.path.dirname(led), "continuity-draft.md")
+    # Report only: drift between the two homes never fails the wrap.
+    if os.path.exists(f"{bin_}/mirror-check"):
+        r = subprocess.run([f"{bin_}/mirror-check"], capture_output=True, text=True)
+        print(f"-- mirror-check (the two homes; report only): exit {r.returncode}")
+        print(((r.stdout.strip() or r.stderr.strip()).splitlines() or ["no output"])[-1])
+    else:
+        print("-- mirror-check: skipped, not installed")
+    draft =os.path.join(os.path.dirname(led), "continuity-draft.md")
     r = subprocess.run([f"{bin_}/encuadre", "continuity", ctx], capture_output=True, text=True)
     if r.returncode != 0:
         sys.exit(f"{r.stdout}{r.stderr}== wrap: encuadre continuity failed; changed: nothing ==")
@@ -124,12 +191,213 @@ if "--wrap" in args:
           f"archive next-session-prompt.md, move the draft into it, then protocolo --close {led} verification \"...\" ==")
     sys.exit(0)
 
+if "--selftest" in args:
+    me, res = os.path.realpath(__file__), []
+    def case(name, ok):
+        res.append(bool(ok))
+        print(f"  [{'OK' if ok else 'FAIL'}] {name}")
+    # Stubs always set, so no case can reach claude or the real encuadre.
+    base = {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"} | {
+        "PROTOCOLO_PROBE_CMD": "false", "PROTOCOLO_ENCUADRE": shlex.join(["sh", "-c", "echo TRAPS-RAN"])}
+    run = lambda *a, **env: subprocess.run([sys.executable, me, *a], capture_output=True, text=True, env=base | env)
+    stub = lambda out: shlex.join(["sh", "-c", f"printf '{out}'"])
+    with tempfile.TemporaryDirectory() as d:
+        t = f"{d}/selftest-task"
+        os.mkdir(t)
+        led, nsp, ctx, sealf = (f"{t}/{n}" for n in ("logbook.jsonl", "next-session-prompt.md", "context.md", "logbook.seal"))
+        last = lambda: json.loads(open(led, encoding="utf-8").read().splitlines()[-1])
+        snap = lambda: (open(led, "rb").read(), open(sealf, "rb").read())
+        def reseal():
+            n = sum(1 for _ in open(led, "rb"))
+            open(sealf, "w").write(f"{n}\t{prefix(led, n)}\t{datetime.datetime.now(datetime.timezone.utc):%Y-%m-%dT%H:%M:%SZ}\n")
+        open(led, "w").write(json.dumps({"id": "2026-01-01T00:00:00Z-1", "ts": "2026-01-01T00:00:00Z", "type": "verification",
+                                         "project": "devwork-infra", "task_id": "selftest-task",
+                                         "pointer": {"kind": "path", "value": ctx}, "text": "fixture"}) + "\n")
+        open(ctx, "w").write(f"---\ntask_id: selftest-task\nroot: {t}\nledger: {led}\n---\n\nfixture\n")
+        open(nsp, "w").write("---\nkind: continuity\ntask_id: selftest-task\nverify:\n  cmd: echo ready\n  expect: ready\n---\n\nfixture\n")
+        open(f"{t}/plan.md", "w").write('# fixture\n\n```yaml graph\ntasks:\n  - id: T1\n    name: fixture\n'
+                                        '    touches: [/tmp/none]\n    proof_cmd: "true"\n```\n')
+        reseal()
+        past, refused = time.time() - 100, "no LOAD-PROBE GO blocking=0"
+
+        s0 = snap(); r = run("--close", led, "verification", "fixture close")
+        case("--close refused with no probe event", r.returncode == 1 and refused in r.stdout + r.stderr and snap() == s0)
+        r = run("--probe", nsp, PROTOCOLO_PROBE_CMD=stub("BLOCKING gaps: none\\nNon-blocking gaps:\\n- a nit\\nVERDICT: GO\\n"))
+        case("--probe GO exits 0 and records LOAD-PROBE GO blocking=0 and probe-<UTC>.md",
+             r.returncode == 0 and last()["text"] == f"LOAD-PROBE GO blocking=0: {nsp}" and glob.glob(f"{t}/probe-*.md"))
+        os.utime(nsp, (time.time() + 100,) * 2)
+        s0 = snap(); r = run("--close", led, "verification", "fixture close")
+        case("--close refused with a probe event older than the prompt",
+             r.returncode == 1 and refused in r.stdout + r.stderr and snap() == s0)
+        os.utime(nsp, (past, past))
+        r = run("--close", led, "verification", "fixture close")
+        case("--close passes the probe guard once the GO probe is newer than the prompt", refused not in r.stdout + r.stderr)
+        r = run("--probe", nsp, PROTOCOLO_PROBE_CMD=stub("BLOCKING gaps:\\n- the plan is missing\\nVERDICT: NO-GO\\n"))
+        case("--probe NO-GO exits 1 and records LOAD-PROBE NO-GO blocking=1",
+             r.returncode == 1 and last()["text"] == f"LOAD-PROBE NO-GO blocking=1: {nsp}")
+        s0 = snap(); r = run("--close", led, "verification", "fixture close")
+        case("--close refused when the last probe is NO-GO", r.returncode == 1 and refused in r.stdout + r.stderr and snap() == s0)
+
+        reseal()
+        os.utime(ctx, (past, past))
+        r = run("--open", ctx)
+        case("--open on an unchanged task skips traps and records GREEN",
+             r.returncode == 0 and "traps skipped: no change since the last close" in r.stdout and "TRAPS-RAN" not in r.stdout
+             and last()["text"].startswith("RECEIVER VERDICT GREEN (C3)"))
+        r = run("--event", led, "decision", "fixture change", CLAUDE_CONFIG_DIR="/Users/you/.claude-work")
+        case("--event fills home obra under the corporate home", r.returncode == 0 and last().get("home") == "obra")
+        r = run("--open", ctx)
+        case("--open after a new ledger event runs traps", r.returncode == 0 and "TRAPS-RAN" in r.stdout)
+        r = run("--event", led, "decision", "fixture change")
+        case("--event fills home personal with CLAUDE_CONFIG_DIR unset", r.returncode == 0 and last().get("home") == "personal")
+        r = run("--probe", nsp, PROTOCOLO_PROBE_CMD=stub("Actions: no blocking gaps found.\\n**BLOCKING gaps:** none\\n**VERDICT:** GO\\n"))
+        case("--probe reads a bold VERDICT and ignores 'blocking' in prose",
+             r.returncode == 0 and last()["text"] == f"LOAD-PROBE GO blocking=0: {nsp}")
+        r = run("--ledger", led)
+        case("--ledger alone runs the report, not the help", "event types:" not in r.stdout)
+        open(nsp, "a").write("\nNo bench work this leg.\n")
+        r = run("--open", ctx)
+        case("--open does not check the bench when the handoff only says 'bench' in prose", "bench-develop check" not in r.stdout)
+    print(f"selftest: {sum(res)} passed, {len(res) - sum(res)} failed")
+    sys.exit(0 if all(res) else 1)
+
+if "--probe" in args:
+    prompt = os.path.abspath(opt("--probe") or "")
+    if not os.path.isfile(prompt):
+        sys.exit("usage: protocolo --probe <prompt.md>")
+    here = os.path.dirname(prompt)
+    # The prompt goes before the tool flags, which take variadic lists and would swallow it.
+    # --tools limits the session to Read; --allowedTools alone only pre-approves and restricts nothing.
+    cmd = shlex.split(os.environ.get("PROTOCOLO_PROBE_CMD") or "claude") + ["-p", f"{prompt} {QUESTION}",
+                                                                            "--tools", "Read", "--allowedTools", "Read"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        out, raw = r.stdout, r.stdout + (f"\n--- stderr ---\n{r.stderr}" if r.stderr.strip() else "")
+    except subprocess.TimeoutExpired:
+        out = raw = "TIMEOUT after 600 s\n"
+    probe = os.path.join(here, f"probe-{datetime.datetime.now(datetime.timezone.utc):%Y%m%dT%H%M%SZ}.md")
+    open(probe, "w", encoding="utf-8").write(raw)
+    verdict = (re.findall(r"VERDICT:\W*(NO-GO|GO)\b", out) or ["NO-GO"])[-1]
+    n = blocking(out)
+    print(f"== probe: VERDICT {verdict}, blocking={n}; answer in {probe} ==")
+    led = os.path.join(here, "logbook.jsonl")
+    if os.path.isfile(led):
+        ev = append_event(led, "verification", f"LOAD-PROBE {verdict} blocking={n}: {prompt}", probe, "probe")
+        print(f"== probe: appended {ev['id']} to {led} ==")
+    else:
+        print(f"== probe: no ledger at {led}; no event written ==")
+    sys.exit(0 if verdict == "GO" and n == 0 else 1)
+
+if "--open" in args:
+    ctx = os.path.abspath(opt("--open") or "")
+    if not os.path.isfile(ctx):
+        sys.exit("usage: protocolo --open <context.md>")
+    fm = frontmatter(ctx)
+    root = fm.get("root") or os.path.dirname(ctx)
+    led = fm.get("ledger") or os.path.join(root, "logbook.jsonl")
+    here = os.path.dirname(led)
+    nsp, pmd, plan = (os.path.join(here, n) for n in ("next-session-prompt.md", "prompt.md", "plan.md"))
+    handoff = open(nsp, encoding="utf-8").read() if os.path.isfile(nsp) else ""
+    hfm = frontmatter(nsp) if handoff else {}
+    red, notes = [], []
+    print(f"== open {fm.get('task_id')}: ledger {led} ==")
+
+    v = hfm.get("verify") if isinstance(hfm.get("verify"), dict) else {}
+    src, cmd, expect = (nsp, v.get("cmd"), v.get("expect")) if v.get("cmd") else \
+        (pmd, frontmatter(pmd).get("verify") if os.path.isfile(pmd) else None, None)
+    if cmd:
+        try:
+            r = subprocess.run(cmd, shell=True, cwd=here, capture_output=True, text=True, timeout=600)
+        except subprocess.TimeoutExpired:
+            r = subprocess.CompletedProcess(cmd, 124, "", "TIMEOUT after 600 s")
+        ok = r.returncode == 0 and (expect is None or r.stdout.strip() == str(expect).strip())
+        print(f"-- verify ({os.path.basename(src)}): {'PASS' if ok else 'FAIL'}"
+              + ("" if ok else f" (exit {r.returncode}; expected {expect!r})\n{(r.stdout + r.stderr).rstrip()[-600:]}"))
+        notes.append(f"verify {'PASS' if ok else 'FAIL'}")
+        red += [] if ok else ["verify"]
+    else:
+        print("-- verify: none in next-session-prompt.md or prompt.md")
+        notes.append("no verify")
+
+    touches = ""
+    m = re.search(r"^```yaml graph\n(.*?)^```", open(plan, encoding="utf-8").read(), re.S | re.M) if os.path.isfile(plan) else None
+    if m:
+        touches = subprocess.run(["yq", "-o=json", "[.tasks[]?.touches[]?]"], input=m[1], capture_output=True, text=True).stdout
+    text = touches + handoff
+    repos = sorted(n for n in {*re.findall(rf"{SOURCE}/([\w.-]+)", text), *(os.path.basename(r) for r in REPOS if os.path.basename(r) in text)}
+                   if os.path.isdir(f"{SOURCE}/{n}/.git"))
+    want = hfm.get("branch") or next((b.rstrip(".") for b in re.findall(r"\b(?:feature|hotfix)/[\w.-]+", handoff)), None)
+    for name in repos:
+        head, *dirty = subprocess.run(["git", "status", "--porcelain", "-b"], cwd=f"{SOURCE}/{name}",
+                                      capture_output=True, text=True).stdout.splitlines() or ["## ?"]
+        br = head[3:].split("...")[0]
+        ok = want is None or br == want
+        print(f"-- {name}: branch {br}" + (f", handoff names {want}: {'OK' if ok else 'MISMATCH'}" if want else ", the handoff names no branch")
+              + f"; {len(dirty)} uncommitted")
+        notes.append(f"{name} on {br}" + ("" if ok else f" not {want}"))
+        red += [] if ok else [f"{name} branch"]
+    if not repos:
+        print("-- repos: none named in plan.md touches or the handoff; no state check")
+        notes.append("no repo")
+    # ponytail: keyed on the command name, so a handoff that needs the bench must name bench-develop.
+    if re.search(r"\bbench-develop\b", handoff) and not os.path.exists(f"{UBIN}/bench-develop"):
+        print("-- bench-develop: skipped, not installed")
+        notes.append("bench not installed")
+    elif re.search(r"\bbench-develop\b", handoff):
+        # With no handoff branch, check that the bench serves whatever its checkout is on.
+        bb = want or subprocess.run(["git", "branch", "--show-current"], cwd=f"{SOURCE}/api-service", capture_output=True, text=True).stdout.strip()
+        r = subprocess.run([f"{UBIN}/bench-develop", "check", bb], capture_output=True, text=True)
+        print(f"-- bench-develop check: exit {r.returncode}\n{(r.stdout + r.stderr).rstrip()}")
+        notes.append(f"bench-develop check exit {r.returncode}")
+        red += ["bench"] if r.returncode else []
+
+    sealf, why = os.path.join(here, "logbook.seal"), []
+    if not os.path.isfile(sealf):
+        why.append("never sealed")
+    else:
+        n, _, *ts = [l.rstrip("\n").split("\t") for l in open(sealf) if l.strip()][-1]
+        # The receiver's own verdicts are not a change of the task.
+        new = [l for l in open(led, encoding="utf-8").read().splitlines()[int(n):]
+               if l.strip() and not json.loads(l).get("text", "").startswith("RECEIVER VERDICT")]
+        why += [f"{len(new)} ledger events after the seal at line {n}"] if new else []
+        why += ["context.md edited after the seal"] if os.path.getmtime(ctx) > os.path.getmtime(sealf) else []
+        for name in repos if want and ts else []:
+            c = subprocess.run(["git", "log", "-1", "--format=%ct", want, "--"], cwd=f"{SOURCE}/{name}", capture_output=True, text=True).stdout.strip()
+            why += [f"{name}: a commit on {want} after the seal"] if c and int(c) > epoch(ts[0]) else []
+    if why:
+        enc = shlex.split(os.environ.get("PROTOCOLO_ENCUADRE") or "") or [os.path.join(os.path.dirname(os.path.realpath(__file__)), "encuadre")]
+        r = subprocess.run(enc + ["traps", ctx], capture_output=True, text=True)
+        print(f"-- traps ({'; '.join(why)}): exit {r.returncode}\n{(r.stdout + r.stderr).rstrip()}")
+        notes.append(f"traps exit {r.returncode}")
+        red += ["traps"] if r.returncode else []
+    else:
+        print("-- traps skipped: no change since the last close")
+        notes.append("traps skipped")
+
+    verdict = "RED" if red else "GREEN"
+    text = f"RECEIVER VERDICT {verdict} (C3): " + "; ".join(notes) + (f". Red on: {', '.join(red)}" if red else "")
+    if os.path.isfile(led):
+        ev = append_event(led, "verification", text, nsp if handoff else ctx, "open")
+        print(f"== open: {verdict}; appended {ev['id']} to {led} ==")
+    else:
+        print(f"== open: {verdict}; no ledger at {led}, no event written ==")
+    sys.exit(1 if red else 0)
+
 if "--close" in args:
     i = args.index("--close")
     if len(args) < i + 4:
         sys.exit('usage: protocolo --close <logbook.jsonl> <type> "<text>" [--store <db>]')
     led, etype, etext = args[i + 1:i + 4]
-    brief = os.path.join(os.path.dirname(os.path.abspath(led)), "next-session-prompt.md")
+    here = os.path.dirname(os.path.abspath(led))
+    brief = os.path.join(here, "next-session-prompt.md")
+    probes = [(e, m[1]) for l in open(led, encoding="utf-8") if l.strip() for e in [json.loads(l)]
+              if e.get("type") == "verification" and (m := re.fullmatch(r"LOAD-PROBE \S+ blocking=\d+: (.+)", e.get("text", "")))
+              and os.path.realpath(m[1]) == os.path.realpath(brief)]
+    lastp = probes[-1][0] if probes else None
+    if not (lastp and lastp["text"].startswith("LOAD-PROBE GO blocking=0: ") and os.path.exists(brief)
+            and epoch(lastp["ts"]) >= int(os.path.getmtime(brief))):
+        sys.exit(f"== close: no LOAD-PROBE GO blocking=0 event for {brief} as its last probe, newer than its mtime; "
+                 f"run protocolo --probe {brief}; changed: nothing ==")
     with tempfile.TemporaryDirectory() as d:
         lines, ev, row = build_event(led, etype, etext, brief, "close", d)
         with open(f"{d}/logbook.jsonl", "w", encoding="utf-8") as t:
@@ -141,7 +409,25 @@ if "--close" in args:
     with open(led, "a", encoding="utf-8") as f:
         f.write(row)
     print(f"== close: appended {ev['id']} ({etype}); briefing-check OK; sealing ==")
-    sys.exit(subprocess.run([sys.executable, os.path.realpath(__file__), "--seal", led] + store).returncode)
+    rc = subprocess.run([sys.executable, os.path.realpath(__file__), "--seal", led] + store).returncode
+    plan = os.path.join(here, "plan.md")
+    if rc == 0 and os.path.isfile(plan) and not os.path.exists(f"{UBIN}/plan-graph"):
+        print("== close: tasks.md skipped: plan-graph not installed ==")
+    elif rc == 0 and os.path.isfile(plan):
+        # --tasks exits 1 while any proof is red; the list it prints is still the state.
+        r = subprocess.run([f"{UBIN}/plan-graph", plan, "--tasks"], capture_output=True, text=True)
+        if r.stdout.startswith("# Tasks"):
+            open(os.path.join(here, "tasks.md"), "w", encoding="utf-8").write(r.stdout)
+        print(f"== close: tasks.md " + ("regenerated" if r.stdout.startswith("# Tasks") else f"skipped: plan-graph exit {r.returncode}") + " ==")
+    if rc == 0:
+        r = subprocess.run([sys.executable, GEN_STATUS, here] + store, capture_output=True, text=True)
+        # gen-status exits 0 on a task the store lacks and prints its row as `no store row`.
+        if r.returncode == 0 and "store `no store row`" not in r.stdout:
+            open(os.path.join(here, "status.md"), "w", encoding="utf-8").write(r.stdout)
+            print("== close: status.md regenerated ==")
+        else:
+            print("== close: status.md skipped: the store holds no record of this task ==")
+    sys.exit(rc)
 
 if "--seal" in args:
     led = opt("--seal")
