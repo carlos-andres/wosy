@@ -73,6 +73,22 @@ Read what the nearest `.devwork/` holds when it is present, and never assume a f
 - Do not enforce a convention the adoption data says is dead. A rule that lives only in a document is a wish.
 - Kill drift at the source. Point a document at a generated command, never at a count you typed.
 
+## Subagent classifier
+
+Classify every dispatch by the work it does before you send it. Each row fixes the agent, the model and the effort. The guard in `secret_guard.py` reads this table and denies a `general-purpose` dispatch whose `model` and `effort` are not its row's, and a named agent of the table whose `effort` is not its row's. It does not check any other agent.
+
+| work | agent | model | effort |
+|---|---|---|---|
+| bulk extract: read N files, write one structured file | `extractor` | sonnet | low |
+| external docs and versions | `web-researcher` | sonnet | medium |
+| consolidate, judge, decide over evidence | `general-purpose` | opus | high |
+| gate a finished change | `qa-gate` | opus | high |
+| load-probe a handoff | `claude -p` | the receiving session's model | the receiving session's effort |
+
+- A named agent carries its model in its frontmatter. Pass `model` and `effort` to `general-purpose` from its row.
+- Pass `effort` from the row on every dispatch. This rule is the explicit instruction the Agent tool requires before it sets effort.
+- Cost follows turns and accumulated context, not output. Give an extractor compact inputs that it reads in one pass.
+
 ## `/clear` between unrelated tasks
 
 Sometimes the user moves to a topic that shares no file, no ticket and no vocabulary with the last five turns. Suggest `/clear` before you continue.

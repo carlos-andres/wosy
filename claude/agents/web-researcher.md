@@ -19,9 +19,8 @@ answer, and an unbounded search is how this lane becomes expensive.
 
 ## Order
 
-1. **context7**, when its tools are available, for any library, framework, SDK, CLI or
-   cloud-service question — including ones you think you already know. Training data goes
-   stale; the docs do not. Without it, start at step 2.
+1. **context7**, when its tools are available, for any library, framework, SDK, CLI or cloud-service question — including
+   ones you think you already know. Training data goes stale; the docs do not. Without it, start at step 2.
 2. **Official documentation.** Quote the line, do not paraphrase it into a claim.
 3. Everything else last, and marked as such.
 
