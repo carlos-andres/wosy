@@ -58,6 +58,8 @@ CONFIG_DIR = os.path.join(HOME, ".config", "secret-guard")
 LOG_PATH = os.path.join(CONFIG_DIR, "guard.log")
 KNOWN_HASHES_PATH = os.path.join(CONFIG_DIR, "known.sha256")
 REDACTED_SUBDIR = os.path.join(".claude", ".secret-guard")
+# The Subagent classifier table is read from here at run time, so the table stays its one source.
+CLASSIFIER_SRC = os.environ.get("SECRET_GUARD_CLASSIFIER") or os.path.join(HOME, ".claude", "CLAUDE.md")
 
 MAX_SCAN_BYTES = 2 * 1024 * 1024
 MAX_CANDIDATES = 60
@@ -83,7 +85,7 @@ SECRET_KEY = (
     r"|(?:(?<![A-Za-z0-9])|(?<=[_.\-]))PASS(?![A-Za-z_])"
     r"|(?-i:Pass)(?![A-Za-z_])"
     r"|PWD(?![A-Za-z])"
-    r"|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_KEY|CLIENT_SECRET|SALT)"
+    r"|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_?KEY|CLIENT_SECRET|SALT)"
     r"(?!" + META_TAIL + r")[A-Za-z0-9_]*"
 )
 HOST_KEY = r"[A-Za-z0-9_]*HOST(?:NAME)?(?![A-Za-z0-9_])"
@@ -104,7 +106,10 @@ RULE_URL = re.compile(
     r"|mongodb(?:\+srv)?)://([^:/@\s\"'<>]+):([^@\s\"'<>]+)@([^\s/:\"'<>?#]+)", re.I)
 RULE_DSN = re.compile(r"\b(password|passwd|pwd)=([^;\"'\s&]+)", re.I)
 RULE_AWS = re.compile(r"\b(AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b")
-RULE_MYSQL = re.compile(r"(mysql\w*\b[^\n]*?\s-p)(\S+)", re.I)
+# The client must be a command word and the -p must sit in its own segment: a file named
+# x.mysql.sql followed later by `cp -p` or `claude -p` is not a password (2026-11-05).
+RULE_MYSQL = re.compile(
+    r"(?:^|(?<=[\s;|&(\"'`/=]))((?:mysql\w*|mariadb\w*)(?=\s)[^\n;|&]*?\s-p)(\S+)", re.I)
 RULE_PDO = re.compile(
     r"(\bnew\s+\\?PDO\s*\(\s*[^,)]+,\s*)(['\"][^'\"]*['\"])(\s*,\s*)(['\"][^'\"]*['\"])", re.I | re.S)
 RULE_CONNECT = re.compile(
@@ -130,10 +135,12 @@ RULE_HOST = re.compile(
 # The narrowing is deliberately the smallest one that removes the false positive:
 #   - it applies to the bare key "pass" ONLY. "passwd" and "pwd" are never English prose.
 #   - it applies to the colon form ONLY. Any "=" or "=>" assignment is untouched.
-#   - it applies ONLY when the key follows a letter and a space, which is prose shape.
+#   - it applies ONLY when the key follows a word and a space ("same pass:", "D2 PASS:"), or opens
+#     a JSON string value ("text": "PASS: ...), which is a status label in a logbook, not a key.
 # A key at the start of a line, after indentation, after a quote, a brace or a comma still redacts,
 # so every real YAML, JSON and dotenv shape keeps its old behaviour.
 PROSE_WEAK_KEY = re.compile(r"^pass$", re.I)
+JSON_VALUE_OPEN = re.compile(r":\s*\\?\"$")
 
 
 def assignment_is_prose(m):
@@ -143,10 +150,15 @@ def assignment_is_prose(m):
     if not PROSE_WEAK_KEY.match(key):
         return False
     lead = m.string[: m.start(1)]
+    # The status-label shapes (digit lead, JSON value open) hold for uppercase PASS only: a lowercase
+    # "db1 pass: x" or {"note": "pass: x"} is a credential and printed in clear on 2026-11-06.
+    label = key == "PASS"
+    if JSON_VALUE_OPEN.search(lead):
+        return label
     stripped = lead.rstrip(" \t")
-    if len(stripped) == len(lead):
+    if len(stripped) == len(lead) or not stripped:
         return False
-    return bool(stripped) and stripped[-1].isalpha()
+    return stripped[-1].isalpha() or (label and stripped[-1].isdigit())
 
 
 def assignment_repl(m):
@@ -415,7 +427,7 @@ def pii_values(text: str, rules: set) -> str:
     return text
 
 
-# People rule for Jira (acli) and Bitbucket output (2026-10-26, Calo's rule): a person's email
+# People rule for Jira (acli) and Bitbucket output (2026-10-26, the owner's rule): a person's email
 # is removed and a person's name is cut to its first word. An Atlassian accountId becomes a token,
 # so two people with the same first name stay distinct. Shapes measured on acli output that day:
 # view --json (displayName, emailAddress, accountId), comment list --json ("author": "First Last"),
@@ -799,6 +811,8 @@ SAFE_VERBS = {
     "trap", "unset", "read", "return", "local", "printf", "echo"}
 # jq is safe only when it does not name a credential-holding file; handled by the file test.
 SAFE_VERBS.discard("jq")
+# diff prints the lines of both files: a planted .env value leaked through it on 2026-11-06.
+SAFE_VERBS.discard("diff")
 KEY_OK_VERBS = {"ssh", "scp", "sftp", "rsync", "ssh-add", "ssh-keygen", "ssh-copy-id", "chmod",
                 "chown", "ls", "eza", "stat", "test", "[", "rm", "mv", "cp", "git", "gh", "aws",
                 "gcloud", "kubectl", "docker", "terraform", "file", "wc", "mkdir", "touch", "cd"}
@@ -1211,6 +1225,22 @@ class Outcome:
         self.payload = payload or {}
 
 
+def classifier_rows() -> dict:
+    """agent -> (work, model, effort) from the Subagent classifier table; {} when unreadable."""
+    try:
+        with open(CLASSIFIER_SRC, encoding="utf-8") as f:
+            text = f.read()
+    except (OSError, UnicodeError):
+        return {}
+    m = re.search(r"^## Subagent classifier\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+    rows = {}
+    for w, a, mo, e in re.findall(r"^\|([^|\n]*)\|\s*`([^`\n]+)`\s*\|([^|\n]*)\|([^|\n]*)\|\s*$",
+                                  m.group(1) if m else "", re.M):
+        if " " not in a.strip():
+            rows[a.strip()] = (w.strip(), mo.strip().lower(), e.strip().lower())
+    return rows
+
+
 def redacted_copy(path: str, cwd: str) -> str:
     dest_dir = os.path.join(cwd, REDACTED_SUBDIR)
     os.makedirs(dest_dir, exist_ok=True)
@@ -1257,6 +1287,36 @@ def evaluate(data: dict) -> Outcome:
         return Outcome("allow")
 
     if event != "PreToolUse":
+        return Outcome("allow")
+
+    if tool in ("Agent", "Task"):
+        # Not a secret rule: the subagent classifier of CLAUDE.md. general-purpose inherits the main model,
+        # which can spend most of a session on bulk extraction that sonnet covers.
+        kind = ti.get("subagent_type") or "general-purpose"
+        model = str(ti.get("model") or "").strip().lower()
+        effort = str(ti.get("effort") or "").strip().lower()
+        rows = classifier_rows()
+        tag = {"rules": ["subagent-classifier"]}
+        if kind == "general-purpose":
+            row = rows.get("general-purpose")
+            # An unreadable table falls back to the model check alone, never to denying every dispatch.
+            if row is None:
+                if not model:
+                    return Outcome("deny", "a general-purpose subagent needs an explicit model. Classify the work "
+                                           "with the Subagent classifier table in CLAUDE.md: use the named "
+                                           "agent of its row (extractor, web-researcher, "
+                                           "qa-gate), or pass model (and effort) for judgment work.", tag)
+                return Outcome("allow")
+            if (model, effort) != row[1:]:
+                named = "; ".join(f"{a} ({w}, effort {e})" for a, (w, _, e) in rows.items() if a != kind)
+                return Outcome("deny", f"general-purpose is the row \"{row[0]}\" of the Subagent classifier in "
+                                       f"CLAUDE.md and needs model={row[1]} and effort={row[2]} "
+                                       f"(got model={model or 'none'}, effort={effort or 'none'}). Other work "
+                                       f"goes to its named agent: {named}.", tag)
+        elif kind in rows and effort != rows[kind][2]:
+            return Outcome("deny", f"{kind} is the row \"{rows[kind][0]}\" of the Subagent classifier in "
+                                   f"CLAUDE.md and needs effort={rows[kind][2]} "
+                                   f"(got {effort or 'none'}).", tag)
         return Outcome("allow")
 
     if tool == "Bash":
@@ -1450,6 +1510,7 @@ def self_test() -> int:
         ("inline URL host", "$u = 'mysql://user:DUMMYA15@dummyhost.local/db';", "dummyhost.local"),
         ("DSN password field", "$dsn = 'host=h;password=DUMMYA16;dbname=n';", "DUMMYA16"),
         ("mysql CLI -p", "system('mysql -uuser -pDUMMYA17 dbname');", "DUMMYA17"),
+        ("mysql after =", "MYSQL_BIN=mysql -uroot -pDUMMYA30", "DUMMYA30"),
         ("AWS access key id", "$k = 'AKIA" "IOSFODNN7EXAMPLE';", "AKIA" "IOSFODNN7EXAMPLE"),
         ("commented-out connection", "//$d = new PDO('mysql:host=h;dbname=n', 'user', 'DUMMYA19');", "DUMMYA19"),
         ("dotenv DB_PASSWORD", "DB_PASSWORD=DUMMYA20\n", "DUMMYA20"),
@@ -1586,6 +1647,7 @@ def self_test() -> int:
             ("echo a url-named var", "echo $PROJECT_URL", "rewrite"),
             ("cat .env", "cat .env", "rewrite"),
             ("cat ini", "cat app.ini", "rewrite"),
+            ("diff two .env", "/usr/bin/diff .env .env.old", "rewrite"),
             ("source .env", "source .env && npm test", "rewrite"),
             ("dump in a later segment", f"cd /tmp && cat {C}", "rewrite"),
             ("substitution", f"echo $(cat {C})", "rewrite"),
@@ -1767,6 +1829,11 @@ def self_test() -> int:
         check("control: dotenv PASS equals", tool("Write", {"file_path": "x.env", "content": "PASS=hunter22xx\n"}).action, "deny")
         check("control: json quoted pass", tool("Write", {"file_path": "x.json", "content": '{"pass": "hunter22xx"}'}).action, "deny")
         check("control: passwd keeps colon", tool("Write", {"file_path": "x.md", "content": "the same passwd: hunter22xx"}).action, "deny")
+        # 2026-11-06: the status-label exemption (digit lead, JSON value open) holds for uppercase PASS only.
+        check("WRITE status label D2 PASS", tool("Write", {"file_path": "x.md", "content": "D2 PASS: proofs green"}).action, "allow")
+        check("WRITE logbook PASS label", tool("Write", {"file_path": "x.jsonl", "content": '{"text": "PASS: gate green"}'}).action, "allow")
+        check("control: json value lowercase pass", tool("Write", {"file_path": "x.json", "content": '{"note": "pass: hunter22xx"}'}).action, "deny")
+        check("control: digit lead lowercase pass", tool("Write", {"file_path": "x.md", "content": "db1 pass: hunter22xx"}).action, "deny")
         check("EDIT secret literal", tool("Edit", {"file_path": "x.php", "old_string": "a", "new_string": "token = 'DUMMYEDIT99'"}).action, "deny")
         check("EDIT key material", tool("Edit", {"file_path": os.path.join(HOME, ".aws", "credentials"), "old_string": "a", "new_string": "b"}).action, "deny")
         check("GREP content leaks", tool("Grep", {"pattern": "password", "path": fix, "output_mode": "content"}).action, "deny")
@@ -1877,7 +1944,7 @@ def self_test() -> int:
         ("dashed area with joined rest", "ref 312-5550142\n"),
         ("NULL in a pii column", "id\temail\n7\tNULL\n"),
         ("unlisted column name", "id\tname\n7\tGoodrich Listings\n"),
-        ("prose with commas", "Calo said: first, check the feed, then the queue.\n"),
+        ("prose with commas", "The owner said: first, check the feed, then the queue.\n"),
         ("information_schema column names",
          "TABLE_NAME\tCOLUMN_NAME\tDATA_TYPE\nusers\tusername\tvarchar\nusers\tid\tint\nleads\tphone\tvarchar\nleads\tstatus\tvarchar\n"),
     ]

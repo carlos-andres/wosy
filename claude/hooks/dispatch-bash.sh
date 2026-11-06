@@ -34,7 +34,7 @@
 #
 set -uo pipefail
 
-STAGES="${STAGES:-/Users/you/.claude/hooks/dispatch-bash.stages}"
+STAGES="${STAGES:-$(dirname -- "${BASH_SOURCE[0]}")/dispatch-bash.stages}"
 STAGE_TIMEOUT="${STAGE_TIMEOUT:-5}"
 
 EVENT="$(cat)"

@@ -57,10 +57,10 @@ of what the code does, no design advice nobody asked for.
 
 ## Routing
 
-BLOCK failures go back to the implementer (`builder` when installed, otherwise the main thread). FIX
-and NOTE are recorded, not returned — a NOTE never reopens a change set.
+BLOCK failures go back to the implementer (`builder` when installed, otherwise the main thread). FIX and NOTE are recorded, not returned — a NOTE never
+reopens a change set.
 
-**Loop cap: two rounds.** Your caller appends your table to `.devwork/tasks/<id>/findings.md`
-under `## round N`; you never write it. If the same change set reaches you a third time, do not re-review it: park at
+**Loop cap: two rounds.** Your caller appends your table to `.devwork/tasks/<id>/findings.md` under
+`## round N`; you never write it. If the same change set reaches you a third time, do not re-review it: park at
 the human gate and list what is still open. Two agents trading a diff forever is the
 failure mode this cap exists to stop.

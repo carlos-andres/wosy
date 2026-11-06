@@ -1,91 +1,108 @@
 #!/usr/bin/env bash
 #
-# statusline.sh - the main Claude Code status line, in ONE jq call.
+# statusline.sh - the main Claude Code status line: one jq call, one git call. Requires bash 5.
 #
-#   model | session | context | effort | 5h | 7d | extra
+#   model | session | dir | [branch |] context | effort [| 5h | 7d | spend] [| corp]
 #
-# Every field comes from the documented stdin payload. Nothing is looked up, computed by another
-# process, or read off disk. The predecessor paid two `awk` calls to humanise token counts and two
-# `date` calls to format the two reset epochs. jq 1.8 does both: integer arithmetic for the counts
-# and `strflocaltime` for local time. Measured 2026-09-18: 20.1 ms before, and the extraction floor
-# for this payload is 7.2 ms.
+# Both homes run this same file. The corp tag prints only when it runs from ~/.claude-work,
+# so the Obra reads apart from the personal home.
+#
+# Every field but the branch comes from the documented stdin payload. The payload has no branch
+# field, so git reads it. Measured 2026-10-26 with hyperfine: 15.4 ms inside a repo.
 #
 # Field reference: https://code.claude.com/docs/en/statusline.md
 #
 # Absence is the normal case and is rendered, never guessed:
-#   - `session_name` is absent unless set with /rename, so the short session id stands in.
-#   - `rate_limits` is absent before the first API response and outside Pro/Max.
-#   - `context_window.used_percentage` can be null early, so it is recomputed from the counts.
+#   - `session_name` is absent until /rename, --name or an AI title, so the short session id stands in.
+#   - `rate_limits` exists only on Pro/Max or behind a spend-limit gateway. The enterprise home
+#     receives `null` (payload captured 2026-10-26, v2.1.308), so an absent window is not printed.
+#   - `context_window.used_percentage` can be null early, so it is recomputed from
+#     `total_input_tokens`, the documented input-only numerator (output tokens never count).
 #   - `effort.level` is absent on a model with no reasoning effort.
 #
-# jq reads stdin directly. Capturing it into a variable first cost a `cat` process and a second
-# subshell for no gain, and the empty-input case is the same test either way.
+# jq stderr is not silenced: Claude Code shows only stdout, and `claude --debug` logs stderr.
 set -uo pipefail
 
-out=$(jq -r '
-  # --- presentation helpers -------------------------------------------------
-  def esc: "[";
+corp=
+[[ ${BASH_SOURCE[0]} == */.claude-work/* ]] && corp=1
+
+# jq prints five lines: session id, "used size", cwd, then the halves on either side of the branch.
+# One value per line, because `read` with a tab IFS collapses an empty leading field.
+mapfile -t f < <(jq -r --arg corp "$corp" '
+  def esc: "\u001b[";
   def dim:   esc + "2m";
   def off:   esc + "0m";
-  def cyan:  esc + "38;2;46;149;153m";
+  def teal:  "46;149;153";
   def red:   esc + "38;2;255;85;85m";
   def amber: esc + "38;2;230;200;0m";
   def green: esc + "38;2;0;160;0m";
+  def sep:   " " + dim + "|" + off + " ";
+  def corp:  if $corp == "" then null else esc + "38;2;" + teal + "mcorp" + off end;
+
+  # Names come from the user or an AI title. Strip control characters so none can inject an escape.
+  def clean: tostring | explode | map(select(. >= 32 and . != 127)) | implode;
 
   # A percentage colours by band. 80 and over is red, 50 and over is amber.
-  def band: if . == null then dim elif . >= 80 then red elif . >= 50 then amber else green end;
-  def pct($n): ($n | floor) as $p | ($p | band) + "\($p)%" + off;
+  def pct($n): ($n | floor) as $p
+    | (if $p >= 80 then red elif $p >= 50 then amber else green end) + "\($p)%" + off;
 
   # Token counts read as 111k, not 111000.
   def human:
-    if . == null then "?"
-    elif . >= 1000000 then "\(. / 1000000 * 10 | floor / 10)m"
+    if . >= 1000000 then "\(. / 1000000 * 10 | floor / 10)m"
     elif . >= 1000 then "\(. / 1000 | floor)k"
     else tostring end;
 
-  def sep: " " + dim + "|" + off + " ";
+  # A limit window, or null when it is absent. $fmt is the strftime of its reset, or null.
+  def window($label; $w; $fmt):
+    if $w.used_percentage == null then null
+    else "\($label) " + pct($w.used_percentage)
+      + (if $fmt == null or $w.resets_at == null then ""
+         else dim + "@" + ($w.resets_at | strflocaltime($fmt)) + off end)
+    end;
 
-  # --- the payload ----------------------------------------------------------
   . as $d
   | ($d.context_window // {}) as $cw
   | ($d.rate_limits // {}) as $rl
-  | (($cw.current_usage // {}) | (.input_tokens // 0) + (.output_tokens // 0)
-        + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)) as $sum
   | ($cw.context_window_size // 200000) as $size
-  | (($cw.total_input_tokens // 0) as $t | if $t > 0 then $t else $sum end) as $used
-  | ($cw.used_percentage // (if $size > 0 then $used * 100 / $size else null end)) as $cpct
+  | ($cw.total_input_tokens // 0) as $used
+  | ($cw.used_percentage // (if $size > 0 then $used * 100 / $size else 0 end)) as $cpct
+  | ($d.workspace.current_dir // $d.cwd // "") as $cwd
 
-  # 1. model. display_name already carries the version, e.g. "Opus 5", "Haiku 4.5".
-  | (cyan + ($d.model.display_name // "Claude") + off) as $model
-
-  # 2. session. The id stands in when no name was set, shortened to its first segment.
-  | ($d.session_name // (($d.session_id // "") | split("-")[0]) // "-") as $sess
-
-  # 3. context.
+  # display_name already carries the version, e.g. "Opus 5.5 (1M context)".
+  | (esc + "38;2;" + teal + "m" + ($d.model.display_name // "Claude" | clean) + off) as $model
+  | ($d.session_name // (($d.session_id // "-") | split("-")[0]) | clean) as $sess
+  | ($cwd | split("/") | last // "-" | clean) as $dir
   | ("\($used | human)/\($size | human) " + pct($cpct)) as $ctx
+  | ($d.effort.level // "-" | clean) as $eff
+  # spend_limit is the apps-gateway spend limit. Dollars arrive up to 5 min after the percentage.
+  | (window("spend"; $rl.spend_limit; null)
+     | if . != null and $rl.spend_limit.used_usd != null
+       then . + dim + " $\($rl.spend_limit.used_usd | floor)/$\($rl.spend_limit.limit_usd)" + off
+       else . end) as $spend
 
-  # 4. effort.
-  | (($d.effort.level // "-") | tostring) as $eff
+  | ($d.session_id // ""), "\($used | floor) \($size)", $cwd,
+    ([$model, $sess, $dir] | join(sep)),
+    ([$ctx, $eff,
+      window("5h"; $rl.five_hour; "%H:%M"),
+      window("7d"; $rl.seven_day; "%a %d %H:%M"),
+      $spend, corp] | map(select(. != null)) | join(sep))
+')
+sid=${f[0]:-} usz=${f[1]:-} cwd=${f[2]:-} left=${f[3]:-} right=${f[4]:-}
 
-  # 5, 6, 7. the three limit windows. Absent is printed as n/a, never as zero.
-  | (if $rl.five_hour.used_percentage == null then dim + "5h n/a" + off
-     else "5h " + pct($rl.five_hour.used_percentage)
-          + (if $rl.five_hour.resets_at == null then ""
-             else dim + "@" + ($rl.five_hour.resets_at | strflocaltime("%H:%M")) + off end)
-     end) as $fh
-  | (if $rl.seven_day.used_percentage == null then dim + "7d n/a" + off
-     else "7d " + pct($rl.seven_day.used_percentage)
-          + (if $rl.seven_day.resets_at == null then ""
-             else dim + "@" + ($rl.seven_day.resets_at | strflocaltime("%a %d %H:%M")) + off end)
-     end) as $sd
-  | (if $rl.spend_limit.used_percentage == null then dim + "extra n/a" + off
-     else "extra " + pct($rl.spend_limit.used_percentage) end) as $ex
-
-  | (($d.session_id // "") + "\t" + ($used | floor | tostring) + " " + ($size | tostring)), ([$model, $sess, $ctx, $eff, $fh, $sd, $ex] | join(sep))
-' 2>/dev/null) || out=""
 # Relay "used size" for `ctx` (skills/context/bin/check.sh): only this stdin payload knows the real
-# window, the transcript drops the [1m] suffix. Both homes write to ~/.claude/state.
-{ IFS=$'\t' read -r sid usz; IFS= read -r out; } <<< "$out"
-[[ -n "$sid" && "$usz" =~ ^[0-9]+\ [0-9]+$ ]] && { mkdir -p "$HOME/.claude/state"; printf '%s\n' "$usz" > "$HOME/.claude/state/context-window-${sid//[^a-zA-Z0-9_-]/_}"; } 2>/dev/null
-[ -n "$out" ] || out="Claude"
-printf '%s' "$out"
+# window, the transcript drops the [1m] suffix. Each home writes to its own <home>/state.
+state=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state
+if [[ -n $sid && $usz =~ ^[0-9]+\ [0-9]+$ ]]; then
+  [[ -d $state ]] || mkdir -p "$state"
+  printf '%s\n' "$usz" > "$state/context-window-${sid//[^a-zA-Z0-9_-]/_}"
+fi 2>/dev/null
+
+[[ -n $left ]] || { printf 'Claude'; exit 0; }
+
+# Empty outside a repo and on a detached HEAD, so nothing prints.
+# --no-optional-locks keeps this read from taking index.lock while a git command runs.
+branch=
+[[ -n $cwd ]] && branch=$(git -C "$cwd" --no-optional-locks branch --show-current 2>/dev/null)
+
+sep=$' \e[2m|\e[0m '
+printf '%s' "$left${branch:+$sep$'\e[38;2;180;140;220m'$branch$'\e[0m'}$sep$right"
