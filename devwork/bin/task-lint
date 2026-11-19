@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""task-lint <task folder>: the fixed top level of a task folder (harness v2 R20, harness-rot FR-014). Read-only.
+
+Exit 0 with one `ok` line when the top level holds only the fixed names; exit 1 with one line per offending name; exit 2
+when the argument is not a folder. Required: context.md, gate.json, logbook.jsonl. Optional: spec.md or prd.md (never
+both), plan.md, the generated next-session-prompt.md, logbook.seal (protocolo --seal writes it beside the ledger),
+the other names protocolo writes there (tasks.md and status.md on --close, continuity-draft.md on --wrap,
+probe-<UTC>.md on --probe), .DS_Store (Finder writes it), and the folders research, sql, proofs, bin, backup and archive.
+"""
+import os, re, sys
+
+REQUIRED = ("context.md", "gate.json", "logbook.jsonl")
+FILES = REQUIRED + ("spec.md", "prd.md", "plan.md", "next-session-prompt.md", "logbook.seal", ".DS_Store",
+                    "tasks.md", "status.md", "continuity-draft.md")
+PROBE = re.compile(r"probe-[0-9]{8}T[0-9]{6}Z\.md")
+DIRS = ("research", "sql", "proofs", "bin", "backup", "archive")
+
+
+def main(argv):
+    if len(argv) != 2 or not os.path.isdir(argv[1]):
+        print("usage: task-lint <task folder>", file=sys.stderr)
+        return 2
+    t, names = argv[1], sorted(os.listdir(argv[1]))
+    bad = [f"{n}: required file missing" for n in REQUIRED if n not in names]
+    for n in names:
+        p = os.path.join(t, n)
+        file = n in FILES or PROBE.fullmatch(n)
+        if file and not os.path.isfile(p) or n in DIRS and not os.path.isdir(p):
+            bad.append(f"{n}: must be a {'folder' if n in DIRS else 'file'}")
+        elif not file and n not in DIRS:
+            bad.append(f"{n}{'/' if os.path.isdir(p) else ''}: outside the fixed task layout")
+    if "spec.md" in names and "prd.md" in names:
+        bad.append("prd.md: spec.md is also present; the layout holds one of them")
+    print("\n".join(bad) or "ok")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

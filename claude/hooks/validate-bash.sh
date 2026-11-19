@@ -70,9 +70,50 @@ if printf '%s' "$command" | grep -qE 'git\s+push\s+(.*--force|.*-f\b).*\b(releas
 fi
 
 # Any push, whatever precedes it: git -C <dir> push, /usr/bin/git push, command git push
-if printf '%s' "$command" | grep -qE '(^|[[:space:];&|(])([^[:space:]]*/)?git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+push([[:space:]]|$)'; then
+PUSH_RE='(^|[[:space:];&|(])([^[:space:]]*/)?git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+push([[:space:]]|$)'
+if printf '%s' "$command" | grep -qE "$PUSH_RE"; then
   block "git push — the owner pushes, never an agent"
 fi
+
+# A wrapper script hides the push from the text match above (2026-11-09: an agent ran an
+# owner-only push-*.sh). Read what the command executes, and the files it references, 2 levels deep.
+declare -A seen=()
+script_pushes() {
+  local f=$1 depth=$2 ref
+  [[ -f $f && -r $f && -z ${seen[$f]:-} ]] || return 1
+  seen[$f]=1
+  [[ $f -ef ${BASH_SOURCE[0]} ]] && return 1
+  [ "$(stat -f%z "$f")" -lt 1048576 ] || return 1
+  [[ $f == *.sh || $f == *.bash || "$(head -c2 "$f")" == '#!' ]] || return 1
+  grep -vE '^[[:space:]]*#' "$f" | grep -qE "$PUSH_RE" && return 0
+  (( depth > 0 )) || return 1
+  for ref in $(grep -vE '^[[:space:]]*#' "$f" | grep -oE '(~|\.{1,2})?/[^[:space:]"'\'';|&)]+' | sort -u); do
+    ref=${ref/#\~/$HOME}
+    [[ $ref == /* ]] || ref="$(dirname "$f")/$ref"
+    # A wrapper execs another executable; system binaries never hold the owner's push.
+    [[ -x $ref && ! $ref =~ ^/(usr|bin|sbin|System|Library|dev|opt/homebrew)/ ]] || continue
+    script_pushes "$ref" $((depth - 1)) && return 0
+  done
+  return 1
+}
+base=${cwd:-$PWD}
+while IFS= read -r piece; do
+  read -ra w <<<"$piece" || true
+  i=0
+  while [[ ${w[i]:-} =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do i=$((i + 1)); done
+  if [[ ${w[i]:-} == cd ]]; then
+    d=${w[i + 1]:-$HOME}; d=${d/#\~/$HOME}
+    [[ $d == /* ]] && base=$d || base="$base/$d"
+    continue
+  fi
+  while [[ ${w[i]:-} =~ ^(bash|sh|zsh|source|\.|exec|env|nohup|time|command)$ ]]; do i=$((i + 1)); done
+  [[ ${w[i]:-} == -n ]] && continue
+  t=${w[i]:-}
+  [[ $t == */* ]] || continue
+  t=${t/#\~/$HOME}
+  [[ $t == /* ]] || t="$base/$t"
+  script_pushes "$t" 2 && block "$t runs git push — the owner runs push scripts, never an agent"
+done < <(printf '%s\n' "$command" | tr ';&|()' '\n\n\n\n\n')
 
 # git reset --hard to a different branch's tip
 if printf '%s' "$command" | grep -qE 'git\s+reset\s+--hard\s+origin/(release|main|master|production|prod)'; then
@@ -107,7 +148,8 @@ SSH_MUTATES="$SSH_MUTATES"'|(^|[^[:alnum:]_])(apt|apt-get|yum|dnf|apk|brew)[[:sp
 SSH_MUTATES="$SSH_MUTATES"'|(^|[^[:alnum:]_])(npm|pnpm|yarn|composer|pip|pip3)[[:space:]]+(install|update|remove|uninstall)'
 SSH_MUTATES="$SSH_MUTATES"'|(^|[^[:alnum:]_])(kill|pkill|killall)[[:space:]]'
 SSH_MUTATES="$SSH_MUTATES"'|(^|[^[:alnum:]_])git[[:space:]]+(push|pull|reset|checkout|clean|merge|rebase|commit|stash)'
-SSH_MUTATES="$SSH_MUTATES"'|(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|GRANT|REVOKE)[[:space:]]'
+SQL_WRITES='INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|GRANT|REVOKE'
+SSH_MUTATES="$SSH_MUTATES"'|('"$SQL_WRITES"')[[:space:]]'
 SSH_MUTATES="$SSH_MUTATES"'|(^|[^[:alnum:]_])redis-cli[[:space:]].*(SET|DEL|FLUSHALL|FLUSHDB|EXPIRE|RENAME)'
 SSH_MUTATES="$SSH_MUTATES"'|(^|[^[:alnum:]_])artisan[[:space:]]+(migrate|db:seed|[a-z]+:clear|[a-z]+:cache|queue:restart|down|up)'
 SSH_MUTATES="$SSH_MUTATES"'|(^|[^[:alnum:]_])crontab[[:space:]]'
@@ -132,6 +174,16 @@ if [ -n "$ssh_tails" ]; then
   done <<SSH_TAILS
 $ssh_tails
 SSH_TAILS
+fi
+# A database client is read-only by default too, in every session; the local profile is the local database and is not judged.
+# An unquoted `<` feeds a file or a heredoc whose words this text test cannot see; a quoted one is a comparison.
+DB_CLIENT='(^|[;&|(])[[:space:]]*([^[:space:];&|]*/)?(mysql|mysqlp|psql)([[:space:]]|$)'
+if printf '%s' "$command" | grep -qE "$DB_CLIENT" && ! printf '%s' "$command" | grep -qE '(mysqlp[[:space:]]+|--login-path=)local([[:space:]]|$)'; then
+  if printf '%s' "$command" | grep -qiE "(^|[^[:alnum:]_])($SQL_WRITES|CREATE|REPLACE|RENAME)[[:space:]]" \
+     || printf '%s' "$command" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g" \
+        | grep -qE '<|(^|[^|])\|[[:space:]]*([^[:space:];&|]*/)?(mysql|mysqlp|psql)([[:space:]]|$)'; then
+    block "a database client would write (a SQL write word, or input fed with '<' or a pipe) outside the local profile, and a prod-touching tool is read-only by default. Get the user's confirmation, then ask them to run it themselves with a leading '!' in the prompt."
+  fi
 fi
 # Warn but allow: rm -rf in current directory (relative path)
 if printf '%s' "$command" | grep -qE 'rm\s+-rf\s+\.\b'; then

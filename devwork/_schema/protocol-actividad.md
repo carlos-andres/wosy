@@ -13,6 +13,10 @@ updated: "2026-10-13"
 
 HQ is /Users/you/.claude, the central. The Obra is /Users/you/.claude-work, the ship, and it works only on Earth: /Users/you/work/umbrella, /Users/you/work/source, its own home, and reads of /tmp.
 
+Since 2026-11-05 the work home runs all seven steps itself when the owner opens a task in it. The labels below apply when the personal home hands a work-area task to the work home as an encargo or a mission.
+
+Each step ends at its gate. The next step starts only after the owner's go in his own words. Step 1 ends when its questions are closed: research first, then at most 2 AskUserQuestion rounds of 4 questions. No spec, plan, code or git write happens before that go.
+
 ```
 HQ   1 SALÓN        conversación, research            → eventos en el ledger
 HQ   2 ORDEN        prompt.md                           gate: prompt-doc
@@ -45,5 +49,5 @@ HQ   7 CIERRE       entregable, sello del ledger, next-session-prompt.md
 - Earth check before the Obra branch: the task folder must be under /Users/you/work/umbrella or /Users/you/work/source. Outside them (a system task, the data volume), HQ runs steps 5 and 6 itself and the Obra route is not considered (the owner, 2026-10-13).
 - A small Earth task can skip steps 3 and 4: the mission carries the one question and its done_when (TASK-15993 WS5).
 - When a request has two readings (a full revision or a patch), ask before step 2.
-- The Obra's limit is a blocklist (deny rules), not an allowlist. A runtime-built path in an interpreter is held only by the auto classifier.
+- The work home's limit is a blocklist (deny rules), not an allowlist. A runtime-built path in an interpreter is held only by the auto classifier.
 - Every subagent dispatch in steps 1 to 7, in both homes, follows the Subagent classifier in CLAUDE.md: one row per dispatch fixes the agent, the model and the effort. The guard denies a `general-purpose` dispatch with no explicit model.

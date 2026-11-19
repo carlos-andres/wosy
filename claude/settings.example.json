@@ -104,6 +104,40 @@
       "WebSearch"
     ],
     "deny": [
+      "Edit(//**/.env)",
+      "Edit(//**/.env.[0-9]*)",
+      "Edit(//**/.env.back)",
+      "Edit(//**/.env.backup)",
+      "Edit(//**/.env.bak-*)",
+      "Edit(//**/.env.dev)",
+      "Edit(//**/.env.development)",
+      "Edit(//**/.env.env.backup)",
+      "Edit(//**/.env.local)",
+      "Edit(//**/.env.old)",
+      "Edit(//**/.env.production)",
+      "Edit(//**/.env.release)",
+      "Edit(//**/.env.stack)",
+      "Edit(//**/.env.staging)",
+      "Edit(//**/.env.test)",
+      "Edit(//**/.env.testing)",
+      "Edit(//**/.envrc)",
+      "Read(//**/.env)",
+      "Read(//**/.env.[0-9]*)",
+      "Read(//**/.env.back)",
+      "Read(//**/.env.backup)",
+      "Read(//**/.env.bak-*)",
+      "Read(//**/.env.dev)",
+      "Read(//**/.env.development)",
+      "Read(//**/.env.env.backup)",
+      "Read(//**/.env.local)",
+      "Read(//**/.env.old)",
+      "Read(//**/.env.production)",
+      "Read(//**/.env.release)",
+      "Read(//**/.env.stack)",
+      "Read(//**/.env.staging)",
+      "Read(//**/.env.test)",
+      "Read(//**/.env.testing)",
+      "Read(//**/.envrc)",
       "Bash(gh pr create *)",
       "Bash(gh pr merge *)",
       "Bash(git push *)",
@@ -170,12 +204,34 @@
       "Bash(rtk git tag --delete *)",
       "Bash(rtk git tag -d *)"
     ],
-    "defaultMode": "auto"
+    "defaultMode": "auto",
+    "disableBypassPermissionsMode": "disable"
   },
   "hooks": {
     "Notification": [],
     "PermissionRequest": [],
-    "PostToolUse": [],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -S -B /Users/you/.claude/hooks/qa-record.py",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -S -B /Users/you/.claude/hooks/round-record.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -205,11 +261,40 @@
         ]
       },
       {
+        "matcher": "WebFetch|WebSearch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 /Users/you/.claude/hooks/secret_guard.py"
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
             "command": "/opt/homebrew/bin/python3 /Users/you/.claude/hooks/secret_guard.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -S -B /Users/you/.claude/hooks/gate.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Agent|Task|Write|Edit|MultiEdit|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -B /Users/you/.claude/hooks/orchestrator.py",
+            "timeout": 10
           }
         ]
       }
@@ -244,15 +329,63 @@
         ]
       }
     ],
-    "Stop": [],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -B /Users/you/.claude/hooks/orchestrator.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "StopFailure": [],
-    "SubagentStop": [],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -S -B /Users/you/.claude/hooks/dispatch-record.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "/opt/homebrew/bin/python3 /Users/you/.claude/hooks/secret_guard.py"
+          },
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -S -B /Users/you/.claude/hooks/anchor.py",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -S -B /Users/you/.claude/hooks/qa-record.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -S -B /Users/you/.claude/hooks/badge.py",
+            "timeout": 5
           }
         ]
       }

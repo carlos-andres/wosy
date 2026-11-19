@@ -88,7 +88,7 @@ badge = {
 }
 # Badge fields (factory logbook 77), from wosy edges; route and out_of_scope stay hand-written.
 targets = [t for (t,) in con.execute("SELECT to_id FROM edge WHERE from_id=? AND (to_id LIKE 'merchant:%' OR to_id GLOB 'ticket:[A-Z]*-[0-9]*') ORDER BY 1", (f"task:{a.task_id}",))]
-merchants = [t[7:] for t in targets if t.startswith("merchant:")]
+merchants = [t[9:] for t in targets if t.startswith("merchant:")]
 if merchants:
     badge["entity"] = "merchant " + ", ".join(merchants)
 shared = [n for (n,) in con.execute(  # most shared merchant/ticket first, then id

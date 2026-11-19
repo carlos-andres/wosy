@@ -4,6 +4,47 @@ All notable changes to the WOSY system. Reverse-chronological. One line per chan
 
 The deep changelog (binary shas, gate status, test counts) lives in `docs/WOSY.md` §13.
 
+## 3.0.0 — 2026-11-19
+
+The repo now carries harness v2: a session can be bound to a task, and hooks hold it to the phase of that task. Tag `v2.1.0` marks the last commit before this entry.
+
+**Upgrade note.** A 2.1.0 install is not upgraded by copying 3.0.0 over it. Back up your Claude home, remove the Subagent classifier table from your own `CLAUDE.md` (the guard now reads `hooks/classifier.tsv`), then follow `INSTALL.md` and merge `claude/settings.example.json` again: it wires 12 hook scripts over 9 events, where 2.1.0 wired 5 over 4.
+
+### Added
+- `claude/hooks/classifier.tsv`: the Subagent classifier as a file, one row per kind of work with its agent, model and effort.
+- `claude/hooks/gate.py`: the phase gate of a task-bound session, on Write, Edit, AskUserQuestion and as a stage of `dispatch-bash.sh`.
+- `claude/hooks/orchestrator.py`: the orchestrator protocol of a task-bound session, as deny rows and warn rows.
+- `claude/hooks/anchor.py` (UserPromptSubmit: loads and binds a task from a `#<token>`), `badge.py` (SubagentStart: gives the subagent the task badge), `dispatch-record.py` (SubagentStop: one telemetry row per subagent), `qa-record.py` (records a test run in the ledger) and `round-record.py` (records an AskUserQuestion round).
+- `claude/hooks/validate-bash.test.py`: regression test of the push-wrapper detection of `validate-bash.sh`.
+- `claude/skills/`: `build-method` (a main session that builds plan nodes through subagents), `interview` (the opening of a task, up to a frozen `context.md`) and `harness-work` (rules for work on the harness itself).
+- `claude/agents/`: `scout` (where something lives), `archaeologist` (history and why) and `builder` (one unit of code work). With them every agent that `classifier.tsv` names ships.
+- `claude/rules/`: `code.md`, `devwork.md` and `sql.md`.
+- `devwork/bin/plan-graph` (checks the decision graph of a plan, runs its proofs, renders `tasks.md`), `doc-gate` (validates the frontmatter of a document against the schema of its kind), `task-lint` (the fixed top level of a task folder) and `telemetry.py` (one row per session and per dispatch of a task, from the transcripts).
+- `devwork/bin/protocolo`: `--bind`, `--load`, `--validate-context`, `--question`, `--measured` and `--handoff`.
+- `devwork/_schema/gate.schema.json` and `devwork/AGENTS.md`.
+
+### Changed
+- `claude/CLAUDE.md` is derived from the owner's v2 global file. The section "Working with the owner" keeps only the rules that hold for any user.
+- `claude/hooks/secret_guard.py` reads the classifier from `hooks/classifier.tsv`, not from `CLAUDE.md`.
+- `claude/settings.example.json` wires 12 hook scripts over 9 events. `claude/hooks/dispatch-bash.stages` adds the `gate.py` stage.
+- `claude/output-styles/coworker.md`, `claude/hooks/validate-bash.sh`, `devwork/_schema/task-doc.schema.json` and `devwork/_schema/protocol-actividad.md` take their installed versions.
+
+### Fixed
+- `devwork/bin/gen-context`: the entity badge lost its first two characters. The 2.1.0 translation renamed the `merchant:` prefix and left the slice at the length of the old one.
+
+### Removed
+- The Subagent classifier table of `claude/CLAUDE.md`. It lives in `claude/hooks/classifier.tsv`.
+
+### Known
+- The two-home model of the owner stays, as in 2.1.0: a personal home and an optional work home `~/.claude-work`. No hook logic changed for it. With one home every ledger event reads `home: personal`, and `telemetry.py` labels that home `personal` in its rows and labels a trial home at `~/.claude-trial` as `trial`.
+- Three points differ by design from what the owner runs: the question owner value is `user` and the telemetry column is `user_turns`; the grace lists `GRACED_CONTEXT` of `protocolo` and `GRACED` of `plan-graph` are empty; `gen-context` slices the `merchant:` prefix.
+- Not shipped: the skills `git-flow`, `local-bench` and `toolchain`, the hook `deny-bare-interpreter.sh` with its stage line, and the hub tools `mirror-check`, `classifier-selftest`, `commit-lint`, `localask`, `transcript-scrub`, `obra` and `obra-independence`. `protocolo` prints a "skipped, not installed" line for `mirror-check` and `bench-develop`.
+- The `interview` skill names `.claude/rules/git.md`, which belongs to the unshipped `git-flow` material. The `build-method` and `interview` skills carry no node id, count, trial-home path or Spanish phrase of the owner's own build; `build-method` keeps its `[hook <id>: ...]` markers, which `orchestrator.py` reads, and rule P55 of `orchestrator.py` still treats a launcher named `ensayo` like `claude -p`.
+- Lines identical to 2.1.0 still name the owner's two homes and dated task ids; their cleanup is planned for 3.0.1.
+- `devwork/_schema/examples/pallet-brief.example.json` and `task-doc.example.md` do not pass their schemas; they are published as installed.
+- `protocolo --close` runs `briefing-check`, which opens a `brain` store at `~/work/umbrella/.devwork/brain.db` unless `--store` names another. With no store there the close stops; pass `--store <your brain.db>`.
+- `brain/` did not change. The 2.0.0 note on `brain/smoke-*.sh` still holds.
+
 ## 2.1.0 — 2026-11-06
 
 ### Added
