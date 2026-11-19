@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# doc-gate — validate a document's frontmatter against the schema its `kind` names.
+# usage: doc-gate <doc.md>
+# The kind -> schema map is read at run time from the `kind` const or enum each _schema/*.schema.json declares.
+# A task-plan must also pass plan-graph. Exit 0 valid, 1 invalid or unknown kind, 2 usage.
+set -u
+S=/Users/you/.devwork/_schema
+PG=/Users/you/work/umbrella/.devwork/bin/plan-graph
+U="usage: doc-gate <doc.md>   frontmatter vs the schema of its kind; task-plan also runs plan-graph"
+[ $# -eq 1 ] || { echo "$U" >&2; exit 2; }
+case $1 in -h|--help) echo "$U"; exit 0 ;; esac
+doc=$1
+[ -f "$doc" ] || { echo "doc-gate: no such file: $doc" >&2; exit 2; }
+
+t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
+yq --front-matter=extract -o json . "$doc" > "$t/fm.json" 2>/dev/null || { echo "doc-gate: no readable frontmatter in $doc"; exit 1; }
+kind=$(jq -r '.kind // empty' "$t/fm.json" 2>/dev/null)
+[ -n "$kind" ] || { echo "doc-gate: $doc has no kind"; exit 1; }
+
+schema=""
+for f in "$S"/*.schema.json; do
+  jq -e --arg k "$kind" '.properties.kind | ((.const // null) == $k) or ((.enum // []) | index($k) != null)' "$f" >/dev/null 2>&1 \
+    && { schema=$f; break; }
+done
+[ -n "$schema" ] || { echo "doc-gate: unknown kind '$kind' in $doc (no schema in $S declares it)"; exit 1; }
+
+check-jsonschema --schemafile "$schema" "$t/fm.json" || { echo "doc-gate: $doc fails $(basename "$schema") (kind $kind)"; exit 1; }
+if [ "$kind" = task-plan ]; then
+  "$PG" "$doc" || { echo "doc-gate: $doc fails plan-graph"; exit 1; }
+fi
+echo "doc-gate: $doc OK (kind $kind, $(basename "$schema"))"

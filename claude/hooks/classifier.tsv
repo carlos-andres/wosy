@@ -1,0 +1,9 @@
+work	agent	model	effort
+locate: "where is X"	scout	haiku	low
+bulk extract: read N files, write one structured file	extractor	sonnet	low
+history and why	archaeologist	sonnet	medium
+external docs and versions	web-researcher	sonnet	medium
+consolidate, judge, decide over evidence	general-purpose	opus	high
+build code	builder	opus	high
+gate a finished change	qa-gate	opus	high
+load-probe a handoff	claude -p	the receiving session's model	the receiving session's effort

@@ -45,6 +45,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 
 VERSION = "1.0.0"
 HOME = os.path.expanduser("~")
@@ -58,8 +59,11 @@ CONFIG_DIR = os.path.join(HOME, ".config", "secret-guard")
 LOG_PATH = os.path.join(CONFIG_DIR, "guard.log")
 KNOWN_HASHES_PATH = os.path.join(CONFIG_DIR, "known.sha256")
 REDACTED_SUBDIR = os.path.join(".claude", ".secret-guard")
-# The Subagent classifier table is read from here at run time, so the table stays its one source.
-CLASSIFIER_SRC = os.environ.get("SECRET_GUARD_CLASSIFIER") or os.path.join(HOME, ".claude", "CLAUDE.md")
+# The Subagent classifier table of this guard's own home, read at run time so the table stays its one source.
+CLASSIFIER_SRC = os.environ.get("SECRET_GUARD_CLASSIFIER") or os.path.join(os.path.dirname(SELF), "classifier.tsv")
+CLASSIFIER_HEAD = ["work", "agent", "model", "effort"]
+# The agents the table must cover. A broken table names none of them, so the list cannot come from it.
+CLASSIFIER_AGENTS = ("general-purpose", "builder", "qa-gate", "scout", "extractor", "archaeologist", "web-researcher")
 
 MAX_SCAN_BYTES = 2 * 1024 * 1024
 MAX_CANDIDATES = 60
@@ -818,6 +822,13 @@ KEY_OK_VERBS = {"ssh", "scp", "sftp", "rsync", "ssh-add", "ssh-keygen", "ssh-cop
                 "gcloud", "kubectl", "docker", "terraform", "file", "wc", "mkdir", "touch", "cd"}
 INTERPRETERS = {"bash", "sh", "zsh", "php", "python", "python3", "perl", "ruby", "node", "deno", "bun"}
 INLINE_FLAGS = {"-c", "-e", "-r", "-E", "--eval", "-p", "-pe", "-ne", "-lane", "-lne"}
+# The only shell characters an unquoted word of a simple command may hold: none of them expands or operates.
+BARE_CHAR_RE = re.compile(r"[A-Za-z0-9_./:@%+,=-]")
+PROSE_VERBS = {"echo", "printf"}
+LEDGER_FLAGS = {"--event", "--qa"}
+# rtk's hook rewrites a bare find to `rtk find` before this guard runs.
+FIND_HEADS = (["find"], ["/usr/bin/find"], ["rtk", "find"])
+FIND_ACTIONS = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fls", "-files0-from"}
 SEARCH_VERBS = {"rg", "grep", "egrep", "fgrep", "ag", "ack"}
 SEARCH_SAFE_FLAGS = {"-l", "-c", "-q", "--files-with-matches", "--count", "--quiet",
                      "--files-without-match", "--files", "-L"}
@@ -841,6 +852,82 @@ def is_secret_var(name: str) -> bool:
     if name in ("PWD", "OLDPWD", "HOSTNAME", "HOST"):
         return name in ("HOSTNAME", "HOST") and False
     return bool(SECRET_VAR_NAME.search(name))
+
+
+def simple_words(cmd: str, escapes: str = ""):
+    """[(raw, value, quoted)] when cmd is one simple command, else None. quoted: the word is one quoted string.
+
+    One simple command has no operator, pipe, subshell, substitution, expansion, redirect, comment or line
+    continuation. Outside quotes a word holds only BARE_CHAR_RE characters and a backslash before one of
+    `escapes`; inside double quotes it holds no $ or backtick, and a backslash only before " or \\.
+    """
+    s = cmd.strip(" \t\n")
+    words, i, n = [], 0, len(s)
+    while i < n:
+        if s[i] in " \t":
+            i += 1
+            continue
+        start, value, parts, quotes = i, "", 0, 0
+        while i < n and s[i] not in " \t":
+            c = s[i]
+            if c == "'":
+                j = s.find("'", i + 1)
+                if j < 0:
+                    return None
+                value += s[i + 1:j]
+                i, quotes = j + 1, quotes + 1
+            elif c == '"':
+                j = i + 1
+                while j < n and s[j] != '"':
+                    if s[j] in "$`" or (s[j] == "\\" and s[j + 1:j + 2] not in ('"', "\\")):
+                        return None
+                    j += s[j] == "\\"
+                    value += s[j]
+                    j += 1
+                if j >= n:
+                    return None
+                i, quotes = j + 1, quotes + 1
+            elif c == "\\" and s[i + 1:i + 2] and s[i + 1] in escapes:
+                value += s[i + 1]
+                i += 2
+            elif BARE_CHAR_RE.fullmatch(c):
+                value += c
+                i += 1
+            else:
+                return None
+            parts += 1
+        words.append((s[start:i], value, quotes == 1 and parts == 1))
+    return words or None
+
+
+def exempt_prose(cmd: str, cwd: str):
+    """cmd with each quoted sentence blanked when cmd is one simple echo, printf or ledger write; else None.
+
+    A sentence is three or more words that are not a path. These commands print or log it as one argument and
+    open no file it names: a ledger event or an echo that named key material was denied for its prose.
+    Every other shape keeps the full check.
+    """
+    words = simple_words(cmd)
+    if not words or words[0][2] or words[0][0] != words[0][1]:
+        return None
+    verb, rest = words[0][0], [v for _, v, _ in words[1:]]
+    if verb in PROSE_VERBS:
+        if verb == "printf" and any(v.startswith("-v") for v in rest):
+            return None
+    elif not (verb.rsplit("/", 1)[-1] == "protocolo" and rest[:1] and rest[0] in LEDGER_FLAGS):
+        return None
+    return " ".join("''" if q and len(v.split()) >= 3 and not os.path.exists(resolve(v, cwd)) else raw
+                    for raw, v, q in words)
+
+
+def find_names_only(cmd: str) -> bool:
+    """True when cmd is one simple find with no action that runs, deletes or writes: it prints names, like ls."""
+    words = simple_words(cmd, escapes="()!")
+    if not words:
+        return False
+    raw = [w[0] for w in words]
+    head_len = next((len(h) for h in FIND_HEADS if raw[:len(h)] == h), 0)
+    return bool(head_len) and not any(v in FIND_ACTIONS or v.startswith("-fprint") for _, v, _ in words[head_len:])
 
 
 def candidate_files(seg: str, cwd: str):
@@ -990,7 +1077,8 @@ def analyze_bash(cmd: str, cwd: str) -> Decision:
     if SELF in cmd or "secret_guard.py" in cmd:
         return d  # already wrapped, or a deliberate --redact / --check call
     probes = 0
-    for seg in split_segments(cmd, pipes=True):
+    segs = split_segments(cmd, pipes=True)
+    for seg in segs:
         verb, args = head(seg)
         if not verb:
             continue
@@ -1040,9 +1128,12 @@ def analyze_bash(cmd: str, cwd: str) -> Decision:
                 d.filter("a URL-shaped variable can carry a credential in its userinfo")
 
         if is_key_material(seg, cwd):
-            if verb not in KEY_OK_VERBS and not search_prints_no_content(verb, args, seg):
-                d.block("names key material (ssh/aws/gh/netrc/pem/key/id_*), which is never printed")
-            continue  # a KEY_OK verb uses the key without printing it; never scan its content
+            prose = exempt_prose(cmd, cwd) if len(segs) == 1 else None
+            if prose is None or is_key_material(prose, cwd):
+                if verb not in KEY_OK_VERBS and not search_prints_no_content(verb, args, seg) \
+                        and not (len(segs) == 1 and find_names_only(cmd)):
+                    d.block("names key material (ssh/aws/gh/netrc/pem/key/id_*), which is never printed")
+                continue  # a KEY_OK verb uses the key without printing it; never scan its content
 
         if d.deny:
             continue
@@ -1225,20 +1316,35 @@ class Outcome:
         self.payload = payload or {}
 
 
-def classifier_rows() -> dict:
-    """agent -> (work, model, effort) from the Subagent classifier table; {} when unreadable."""
+def classifier_rows():
+    """(agent -> (work, model, effort), problem) from CLASSIFIER_SRC; problem is "" only for a valid table."""
     try:
-        with open(CLASSIFIER_SRC, encoding="utf-8") as f:
-            text = f.read()
-    except (OSError, UnicodeError):
-        return {}
-    m = re.search(r"^## Subagent classifier\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+        with open(CLASSIFIER_SRC, encoding="utf-8-sig") as f:
+            lines = [(n, ln) for n, ln in enumerate(f.read().splitlines(), 1) if ln.strip()]
+    except FileNotFoundError:
+        return {}, "is missing"
+    except IsADirectoryError:
+        return {}, "is a directory"
+    except (OSError, UnicodeError, ValueError) as e:
+        return {}, f"cannot be read as UTF-8 text ({type(e).__name__})"
+    if not lines:
+        return {}, "is empty"
+    if [c.strip() for c in lines[0][1].split("\t")] != CLASSIFIER_HEAD:
+        return {}, f"line {lines[0][0]} is not the header"
+    if len(lines) == 1:
+        return {}, "has a header and no row"
     rows = {}
-    for w, a, mo, e in re.findall(r"^\|([^|\n]*)\|\s*`([^`\n]+)`\s*\|([^|\n]*)\|([^|\n]*)\|\s*$",
-                                  m.group(1) if m else "", re.M):
-        if " " not in a.strip():
-            rows[a.strip()] = (w.strip(), mo.strip().lower(), e.strip().lower())
-    return rows
+    for n, ln in lines[1:]:
+        cells = [c.strip() for c in ln.split("\t")]
+        if len(cells) != 4 or not all(cells):
+            return {}, f"line {n} has {len(cells)} cells or an empty one"
+        w, a, mo, e = cells
+        if " " not in a:
+            rows[a] = (w, mo.lower(), e.lower())
+    missing = [a for a in CLASSIFIER_AGENTS if a not in rows]
+    if missing:
+        return {}, f"has no row for {', '.join(missing)}"
+    return rows, ""
 
 
 def redacted_copy(path: str, cwd: str) -> str:
@@ -1290,32 +1396,30 @@ def evaluate(data: dict) -> Outcome:
         return Outcome("allow")
 
     if tool in ("Agent", "Task"):
-        # Not a secret rule: the subagent classifier of CLAUDE.md. general-purpose inherits the main model,
+        # Not a secret rule: the subagent classifier of CLASSIFIER_SRC. general-purpose inherits the main model,
         # which can spend most of a session on bulk extraction that sonnet covers.
         kind = ti.get("subagent_type") or "general-purpose"
         model = str(ti.get("model") or "").strip().lower()
         effort = str(ti.get("effort") or "").strip().lower()
-        rows = classifier_rows()
+        rows, problem = classifier_rows()
         tag = {"rules": ["subagent-classifier"]}
+        # Fail closed: a model-only fallback let a builder with effort low through a broken table.
+        if problem and kind in CLASSIFIER_AGENTS:
+            return Outcome("deny", f"the Subagent classifier table {CLASSIFIER_SRC} {problem}, so every dispatch of "
+                                   f"an agent it covers ({', '.join(CLASSIFIER_AGENTS)}) is denied until it is fixed. "
+                                   f"It needs a tab-separated header {' '.join(CLASSIFIER_HEAD)}, then one row of "
+                                   "four non-empty tab-separated cells for each of those agents.", tag)
         if kind == "general-purpose":
-            row = rows.get("general-purpose")
-            # An unreadable table falls back to the model check alone, never to denying every dispatch.
-            if row is None:
-                if not model:
-                    return Outcome("deny", "a general-purpose subagent needs an explicit model. Classify the work "
-                                           "with the Subagent classifier table in CLAUDE.md: use the named "
-                                           "agent of its row (extractor, web-researcher, "
-                                           "qa-gate), or pass model (and effort) for judgment work.", tag)
-                return Outcome("allow")
+            row = rows["general-purpose"]
             if (model, effort) != row[1:]:
                 named = "; ".join(f"{a} ({w}, effort {e})" for a, (w, _, e) in rows.items() if a != kind)
                 return Outcome("deny", f"general-purpose is the row \"{row[0]}\" of the Subagent classifier in "
-                                       f"CLAUDE.md and needs model={row[1]} and effort={row[2]} "
+                                       f"{CLASSIFIER_SRC} and needs model={row[1]} and effort={row[2]} "
                                        f"(got model={model or 'none'}, effort={effort or 'none'}). Other work "
                                        f"goes to its named agent: {named}.", tag)
         elif kind in rows and effort != rows[kind][2]:
             return Outcome("deny", f"{kind} is the row \"{rows[kind][0]}\" of the Subagent classifier in "
-                                   f"CLAUDE.md and needs effort={rows[kind][2]} "
+                                   f"{CLASSIFIER_SRC} and needs effort={rows[kind][2]} "
                                    f"(got {effort or 'none'}).", tag)
         return Outcome("allow")
 
@@ -1339,8 +1443,23 @@ def evaluate(data: dict) -> Outcome:
             return Outcome("rewrite", "; ".join(d.wrap), {"updatedInput": new, "rules": d.rules})
         return Outcome("allow")
 
+    if tool in ("WebFetch", "WebSearch") or tool.startswith("mcp__"):
+        # A URL carries "@" as "%40", so decode before matching.
+        payload = urllib.parse.unquote(json.dumps(ti))
+        # A noreply address is public by design: GitHub hands it out so the real one stays private.
+        if any(not PII_EMAIL_NOT.search(m) and not m.lower().endswith("@users.noreply.github.com")
+               for m in PII_EMAIL.findall(payload)):
+            return Outcome("deny", f"the {tool} input carries an email address, and this call leaves the machine. "
+                                   "Remove it, or send a <email:token> in its place.", {"rules": ["pii-email"]})
+        _, rules = redact_text(payload)
+        if rules:
+            return Outcome("deny", f"the {tool} input carries a secret-looking literal ({', '.join(rules)}), and "
+                                   "this call leaves the machine. Remove it, or reference the environment or a "
+                                   "vault instead.", {"rules": rules})
+        return Outcome("allow")
+
     if tool in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Grep", "Glob"):
-        target = ti.get("file_path") or ti.get("notebook_path") or ti.get("path") or ""
+        target =ti.get("file_path") or ti.get("notebook_path") or ti.get("path") or ""
         if is_key_material(target, cwd):
             return Outcome("deny", f"{tool} of key material is never allowed: {os.path.basename(target)}")
 
@@ -1474,7 +1593,7 @@ def cli_check(paths) -> int:
 # ----------------------------------------------------------------------------------------
 
 def self_test() -> int:
-    global NOLOG, RTK_CHECK
+    global NOLOG, RTK_CHECK, CLASSIFIER_SRC
     NOLOG = True
     # The battery must not depend on a local rtk, so the wrap path is exercised with the check
     # off. The rtk-clobber downgrade is asserted separately below, with the check forced on.
@@ -1755,6 +1874,41 @@ def self_test() -> int:
             ("CONTROL redis-cli no auth", "redis-cli -n 2 ping", "allow"),
             ("CONTROL pg_dump plain", "pg_dump -h db -U app appdb", "allow"),
         ]
+        # A quoted sentence that names key material reads nothing, and find with
+        # no action prints names only, but only as the whole command. The controls keep the deny.
+        bash_cases += [
+            ("ledger prose names key material", 'protocolo --event l.jsonl verification "the binary writes .claude.json in the home"', "allow"),
+            ("echo a sentence naming a key", 'echo "do not print ~/.ssh/id_rsa from a hook"', "allow"),
+            ("printf a sentence naming a key", "printf '%s\\n' \"do not print ~/.ssh/id_rsa from a hook\"", "allow"),
+            ("find by key name pattern", "find . -name '*.pem' -o -name '*.key'", "allow"),
+            ("rtk find by key name pattern", "rtk find . -name '*.pem'", "allow"),
+            ("CONTROL ledger prose behind a pipe", 'protocolo --event l.jsonl verification "the binary writes .claude.json in the home" | cut -c1-9', "deny"),
+            ("CONTROL printf -v holds the sentence", 'printf -v x "do not print ~/.ssh/id_rsa from a hook"', "deny"),
+            ("CONTROL sentence redirected to a file", 'echo "do not print ~/.ssh/id_rsa from a hook" > /tmp/n', "deny"),
+            ("CONTROL find piped to wc", "find . -name '*.pem' | wc -l", "deny"),
+            ("CONTROL find -delete", "find . -name '*.pem' -delete", "deny"),
+            ("CONTROL one-word quoted key path", 'echo "~/.ssh/id_rsa"', "deny"),
+            ("CONTROL quoted path with a space", 'cat "/x/Application Support/.claude.json"', "deny"),
+            ("CONTROL sentence piped to sh", 'echo "cat the key ~/.ssh/id_rsa" | sh', "deny"),
+            ("CONTROL sentence piped to xargs", 'echo "the key ~/.ssh/id_rsa here" | xargs cat', "deny"),
+            ("CONTROL runner behind a wrapper flag", 'sudo -u root sh -c "cat the key ~/.ssh/id_rsa now"', "deny"),
+            ("CONTROL unknown variable at the head", '$SHELL -c "cat the key ~/.ssh/id_rsa now"', "deny"),
+            ("CONTROL sentence split by a positional", 'f(){ cat $1; }; f "a b /x/.ssh/id_rsa"', "deny"),
+            ("CONTROL sentence held in a variable", 'x="a b /x/.ssh/id_rsa"; cat $x', "deny"),
+            ("CONTROL sentence split by read", 'echo "a b /x/.ssh/id_rsa" | while read p q r; do cat "$r"; done', "deny"),
+            ("CONTROL interpreter sentence", "python3 -c \"print(open('/x/.claude.json').read()) # whole file\"", "deny"),
+            ("CONTROL find -exec on keys", "find ~/.ssh -name id_rsa -exec cat {} \\;", "deny"),
+            ("CONTROL find piped to xargs", "find ~/.ssh -name 'id_*' | xargs cat", "deny"),
+            ("CONTROL echo sentence holding a $ expansion", 'echo "do not print ~/.ssh/id_rsa from $HOME"', "deny"),
+            ("find by key name pattern, /usr/bin path", "/usr/bin/find . -name '*.pem' -o -name '*.key'", "allow"),
+            ("CONTROL find -execdir", "find . -name '*.pem' -execdir cat '{}' +", "deny"),
+            ("CONTROL find -ok", "find . -name '*.pem' -ok cat '{}' +", "deny"),
+            ("CONTROL find -okdir", "find . -name '*.pem' -okdir cat '{}' +", "deny"),
+            ("CONTROL find -fls", "find . -name '*.pem' -fls names.txt", "deny"),
+            ("CONTROL find -files0-from", "find -files0-from list.txt -name '*.pem'", "deny"),
+            ("CONTROL find -fprint", "find . -name '*.pem' -fprint names.txt", "deny"),
+            ("CONTROL find -fprint0", "find . -name '*.pem' -fprint0 names.txt", "deny"),
+        ]
         for name, cmd, want in bash_cases:
             if not env_ok and ".env" in cmd:
                 continue
@@ -1805,6 +1959,14 @@ def self_test() -> int:
         check("WRITE secret literal", tool("Write", {"file_path": "x.php", "content": "return ['password' => 'hunter22xx'];"}).action, "deny")
         check("WRITE with marker", tool("Write", {"file_path": "x.php", "content": "return ['password' => 'hunter22xx']; // redact:allow"}).action, "allow")
         check("WRITE env read", tool("Write", {"file_path": "x.php", "content": "return ['password' => getenv('DB_PASSWORD')];"}).action, "allow")
+        check("OUTBOUND WebFetch url with email", tool("WebFetch", {"url": "https://example.org/find?u=jane.dummy@example.com", "prompt": "x"}).action, "deny")
+        check("OUTBOUND WebFetch clean url", tool("WebFetch", {"url": "https://example.org/docs", "prompt": "summarise"}).action, "allow")
+        check("OUTBOUND WebSearch query with email", tool("WebSearch", {"query": "who is jane.dummy@example.com"}).action, "deny")
+        check("OUTBOUND mcp nested email", tool("mcp__x__send", {"body": {"to": ["jane.dummy@example.com"]}}).action, "deny")
+        check("OUTBOUND mcp nested secret literal", tool("mcp__x__send", {"body": {"text": "password = 'hunter22xx'"}}).action, "deny")
+        check("OUTBOUND mcp clean payload", tool("mcp__x__send", {"body": {"text": "hello", "n": 3}}).action, "allow")
+        check("OUTBOUND WebFetch url-encoded email", tool("WebFetch", {"url": "https://example.org/find?u=jane.dummy%40example.com", "prompt": "x"}).action, "deny")
+        check("OUTBOUND github noreply address", tool("WebSearch", {"query": "12345+jdummy@users.noreply.github.com"}).action, "allow")
 
         # D2, 2026-09-18. The deny message used to name the rule and nothing else, so a writer
         # had to bisect their own file to find the line. These six rows are a pair set: three
@@ -1840,6 +2002,37 @@ def self_test() -> int:
         check("GREP files_with_matches", tool("Grep", {"pattern": "password", "path": fix}).action, "allow")
         check("GREP content clean", tool("Grep", {"pattern": "hello", "path": SCRIPT, "output_mode": "content"}).action, "allow")
         check("GLOB key material", tool("Glob", {"pattern": "*", "path": os.path.join(HOME, ".ssh")}).action, "deny")
+        check("CLASSIFIER table of this home is valid", classifier_rows()[1], "")
+        saved_src, CLASSIFIER_SRC = CLASSIFIER_SRC, os.path.join(tmp, "missing", "classifier.tsv")
+        try:
+            check("CLASSIFIER missing table denies builder high",
+                  tool("Agent", {"subagent_type": "builder", "effort": "high"}).action, "deny")
+            check("CLASSIFIER missing table keeps Explore", tool("Agent", {"subagent_type": "Explore"}).action, "allow")
+            # Every other broken state denies too, and the CONTROL proves the same rows allow when the table is whole.
+            good = "work\tagent\tmodel\teffort\n" + "".join(f"w\t{a}\topus\thigh\n" for a in CLASSIFIER_AGENTS)
+            states = [("unreadable", good.encode(), 0), ("a directory", None, None),
+                      ("not UTF-8", b"\xff\xfe" + good.encode(), None), ("empty", b"", None),
+                      ("header only", b"work\tagent\tmodel\teffort\n", None),
+                      ("malformed row", (good + "w\tbuilder\topus\n").encode(), None),
+                      ("no row for scout", good.replace("w\tscout\topus\thigh\n", "").encode(), None),
+                      ("CONTROL same table valid", good.encode(), None)]
+            for n, (state, body, mode) in enumerate(states):
+                CLASSIFIER_SRC = os.path.join(tmp, f"classifier-{n}.tsv")
+                if body is None:
+                    os.makedirs(CLASSIFIER_SRC)
+                else:
+                    with open(CLASSIFIER_SRC, "wb") as f:
+                        f.write(body)
+                    if mode is not None:
+                        os.chmod(CLASSIFIER_SRC, mode)
+                o = tool("Agent", {"subagent_type": "builder", "effort": "high"})
+                if state.startswith("CONTROL"):
+                    check(f"CLASSIFIER {state} allows builder high", o.action, "allow")
+                else:
+                    check(f"CLASSIFIER table {state} denies builder high", (o.action, CLASSIFIER_SRC in o.message),
+                          ("deny", True))
+        finally:
+            CLASSIFIER_SRC = saved_src
 
         # ---- PII layer on tool decisions (2026-10-26) ----------------------------------
         global _pii_cols

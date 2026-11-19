@@ -1,6 +1,8 @@
-# Installing wosy 2.0.0
+# Installing wosy 3.0.0
 
 macOS or Linux. The files are copied, not linked; there is no installer script.
+
+Coming from 2.1.0: do not copy 3.0.0 over it. Read the upgrade note of `CHANGELOG.md` first, then follow every step below.
 
 ## 1. Prerequisites
 
@@ -24,11 +26,13 @@ cp -Rp claude/. ~/.claude/
 mkdir -p ~/.devwork && cp -Rp devwork/. ~/.devwork/
 ```
 
+`claude/CLAUDE.md` replaces your own global file in that copy. Merge the two by hand when you already have one, and keep no Subagent classifier table in it: the classifier is `~/.claude/hooks/classifier.tsv`.
+
 After the rewrite, paths under `$HOME/work/...` name an optional work area that `protocolo`, `encuadre` and `briefing-check` read; set them to your own or leave them unused.
 
 ## 4. Wire the hooks
 
-Merge `hooks`, `permissions` and `statusLine` from `claude/settings.example.json` into `~/.claude/settings.json`. Keep your own `env`, `model` and plugins.
+Merge `hooks`, `permissions` and `statusLine` from `claude/settings.example.json` into `~/.claude/settings.json`. Keep your own `env`, `model` and plugins. The example wires 12 hook scripts over 9 events; the task hooks do nothing in a session that is not bound to a task.
 
 ## 5. Build brain
 
@@ -39,15 +43,19 @@ cd brain && go build -o "$HOME/.local/bin/brain" ./cmd/brain
 ## 6. Verify
 
 ```bash
-python3 ~/.claude/hooks/secret_guard.py self-test     # passed N   failed 0
 bash -n ~/.claude/hooks/*.sh && echo hooks-parse-ok
+python3 ~/.claude/hooks/secret_guard.py self-test          # passed N   failed 0
+python3 -I ~/.claude/hooks/validate-bash.test.py           # exit 0
+~/.devwork/bin/protocolo --selftest
+~/.devwork/bin/ctx --selftest
 brain version
 ```
 
-In a new Claude Code session, run a harmless `git push --dry-run`: `validate-bash.sh` must refuse it.
+In a new Claude Code session, run a harmless `git push --dry-run`: `validate-bash.sh` must refuse it. Dispatch a `general-purpose` subagent without `model: opus`: `secret_guard.py` must deny it.
 
 ## Customize
 
+- `claude/hooks/classifier.tsv` is the owner's table. Change a row there, and keep an agent file under `~/.claude/agents/` for every agent a row names.
 - `claude/hooks/pii_columns.txt` is an example subset. Generate yours from your own schema: `column<TAB>family`, one per line.
 - `RTK.md` matters only if you use the rtk command proxy; add `@RTK.md` to `CLAUDE.md` then.
 

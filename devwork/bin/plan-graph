@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""plan-graph — check the decision graph of a plan, run its proofs, render tasks.md.
+
+  plan-graph <plan.md|plan.yml>          schema + ids + depends_on + no cycle + plan gate; prints the order
+  plan-graph <plan> --run                also runs every proof_cmd from the umbrella root
+  plan-graph <plan> --tasks              prints a spec-kit tasks.md from the graph; [x] = proof passed
+
+The graph is the ```yaml graph fenced block of plan.md, or the tasks/risks/hypothesis of a
+legacy plan.yml. Status is never written by hand: --tasks derives it from the proofs.
+The plan gate (harness v2 R25) applies to plan.md in every mode: each node names requirement ids in
+its note ("reqs: R06, R25; ctx: 150k"), each defined in the spec the frontmatter names (`- **R<nn>`
+or `- A<n>` in the spec or in a file its **Input** line names), a proof_cmd, a ctx estimate and a phase.
+Grace rule, as A10 grants old context.md files: a plan whose real path is on the frozen GRACED list was made before
+R25, so the gate is skipped with one line on stderr and the exit code is what it was before the gate.
+Exit 0 valid (and, with --run, every proof passed); 1 otherwise.
+"""
+import json, os, re, subprocess, sys
+from pathlib import Path
+
+SCHEMA = Path.home() / ".devwork/_schema/plan-graph.schema.json"
+FENCE = re.compile(r"^```yaml graph\n(.*?)^```", re.S | re.M)
+REQS, CTX = re.compile(r"\breqs:\s*([^;]*)"), re.compile(r"\bctx:\s*\d")
+DEFINED = re.compile(r"^- (?:\*\*(R\d+)|(A\d+))\b", re.M)
+# The real plans the R25 gate failed and the live plan-graph accepted, over both task roots on 2026-11-16.
+GRACED = ()
+
+
+def load(plan):
+    text = plan.read_text()
+    if plan.suffix == ".md":
+        m = FENCE.search(text)
+        if not m:
+            sys.exit(f"{plan}: no ```yaml graph block")
+        text = m.group(1)
+    out = subprocess.run(["yq", "-o=json", 'pick(["tasks","risks","hypothesis"])'],
+                         input=text, capture_output=True, text=True, check=True).stdout
+    return json.loads(out)
+
+
+def schema_errors(graph):
+    tmp = Path(os.environ.get("TMPDIR", "/tmp")) / f"plan-graph-{os.getpid()}.json"
+    tmp.write_text(json.dumps(graph))
+    try:
+        r = subprocess.run(["check-jsonschema", "--output-format", "json", "--schemafile", str(SCHEMA), str(tmp)],
+                           capture_output=True, text=True)
+        return [f"{e['path']}: {e['message'][:120]}" for e in json.loads(r.stdout or "{}").get("errors", [])]
+    finally:
+        tmp.unlink()
+
+
+def order(nodes):
+    """Topological order; errors for duplicate ids, unknown refs, cycles."""
+    ids = [n["id"] for n in nodes]
+    errs = [f"duplicate id {i}" for i in sorted({i for i in ids if ids.count(i) > 1})]
+    deps = {n["id"]: n.get("depends_on") or [] for n in nodes}
+    for n in nodes:
+        for ref in (n.get("depends_on") or []) + (n.get("blocks_on_fail") or []):
+            if ref not in deps:
+                errs.append(f"{n['id']}: unknown node {ref}")
+    done, seq = set(), []
+    while len(seq) < len(deps):
+        ready = [i for i in ids if i not in done and all(d in done or d not in deps for d in deps[i])]
+        if not ready:
+            errs.append("cycle among " + ", ".join(i for i in ids if i not in done))
+            break
+        for i in ready:
+            done.add(i)
+            seq.append(i)
+    return seq, errs
+
+
+def plan_gate(plan, nodes):
+    """R25: requirement ids that the spec defines, proof_cmd, ctx estimate and session per node."""
+    m = re.search(r"^spec:\s*[\"']?([^\s\"']+)", plan.read_text(), re.M)
+    spec = Path(m[1]) if m else None
+    files, known, errs = [], None, []
+    if spec and spec.is_file():
+        inputs = "\n".join(re.findall(r"^\*\*Input\*\*.*$", spec.read_text(), re.M))
+        files = [spec] + [Path(p) for p in re.findall(r"`(/[^`]+\.md)`", inputs) if Path(p).is_file()]
+        known = {a or b for f in files for a, b in DEFINED.findall(f.read_text())}
+    else:
+        errs.append(f"plan: the frontmatter names no spec that exists ({m[1] if m else 'no spec:'}); requirement ids not checked")
+    for n in (n for n in nodes if isinstance(n, dict)):
+        i, note = n.get("id", "?"), str(n.get("note") or "")
+        reqs = re.findall(r"\b[A-Z]+\d+\b", REQS.search(note)[1]) if REQS.search(note) else []
+        errs += [] if reqs else [f'{i}: no requirement id (no "reqs: R<nn>" in its note)']
+        errs += [f"{i}: requirement {r} is not in the spec ({', '.join(f.name for f in files)})"
+                 for r in reqs if known is not None and r not in known]
+        errs += [] if n.get("proof_cmd") else [f"{i}: no proof_cmd"]
+        errs += [] if CTX.search(note) else [f'{i}: no context estimate (no "ctx: <n>" in its note)']
+        errs += [] if n.get("phase") else [f"{i}: no session (no phase)"]
+    return errs
+
+
+def graced(plan):
+    """True for a plan whose real path is on GRACED; nothing in the plan itself can grace it."""
+    if os.path.realpath(plan) in GRACED:
+        print("plan gate skipped: this plan is on the frozen list of plans made before R25 (grace rule, as A10)", file=sys.stderr)
+        return True
+    return False
+
+
+def root_of(plan):
+    for p in plan.resolve().parents:
+        if (p / ".devwork").is_dir():
+            return p
+    return plan.resolve().parent
+
+
+def run_proofs(nodes, root):
+    return {n["id"]: subprocess.run(n["proof_cmd"], shell=True, cwd=root, capture_output=True).returncode == 0
+            for n in nodes}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        sys.exit(__doc__)
+    plan = Path(sys.argv[1])
+    graph = load(plan)
+    nodes = graph.get("tasks") or []
+    errs = schema_errors(graph)
+    seq, gerrs = order(nodes) if not errs else ([], [])
+    errs += gerrs + (plan_gate(plan, nodes) if plan.suffix == ".md" and not graced(plan) else [])
+    for e in errs:
+        print(f"FAIL {e}")
+    if errs:
+        sys.exit(1)
+    byid = {n["id"]: n for n in nodes}
+    passed = run_proofs(nodes, root_of(plan)) if {"--run", "--tasks"} & set(sys.argv) else {}
+    if "--tasks" in sys.argv:
+        tid = re.search(r"^task_id:\s*(\S+)", plan.read_text(), re.M)
+        print(f"# Tasks: {tid[1] if tid else plan.parent.name}\n\n<!-- generated by plan-graph from {plan.name}; do not edit -->\n")
+        for i in seq:
+            n = byid[i]
+            box = "x" if passed.get(i) else " "
+            after = ", ".join(n.get("depends_on") or [])
+            print(f"- [{box}] {i} {n['name']}" + (f" (after {after})" if after else ""))
+    else:
+        for i in seq:
+            mark = ("PASS " if passed[i] else "FAIL ") if passed else ""
+            print(f"{mark}{i}\t{byid[i]['name']}")
+        print(f"ok: {len(nodes)} nodes, {len(graph.get('risks') or [])} risks")
+    sys.exit(0 if all(passed.values()) else 1)
+
+
+if __name__ == "__main__":
+    main()

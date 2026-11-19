@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate.schema.json",
+  "title": "devwork · tasks/<id>/gate.json — the one state file of a task: phase, goal, questions, entry_when, done_when, QA checklist, bound sessions and the next command. Only protocolo writes it.",
+  "description": "harness v2 R01, R05, R22, R26. The phases are graph 1 of A5. goal, entry_when and done_when are copied from context.md by protocolo --validate-context, which also records the sha256 that freezes it; protocolo --phase refuses while context.md differs from that hash, refuses to leave discovery without entry_when and done_when, and refuses closed unless done_when exits 0. A session listed in no gate.json is not gated (A4).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["task_id", "phase", "goal", "entry_when", "done_when", "frozen", "questions", "qa", "sessions", "next", "updated"],
+  "properties": {
+    "task_id": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "the folder slug"},
+    "phase": {"enum": ["discovery", "planning", "execution", "qa", "closed", "continuity"], "description": "graph 1 (A5); only the owner's ! protocolo --phase moves it. continuity: the session ends and the task stays open"},
+    "goal": {"type": ["string", "null"], "description": "context.md goal at its last --validate-context; null before it"},
+    "entry_when": {"type": ["string", "null"], "minLength": 1, "description": "shell command, run in the task folder, that exits 0 when the work may start; required to leave discovery"},
+    "done_when": {"type": ["string", "null"], "minLength": 1, "description": "shell command, run in the task folder; --phase closed runs it and refuses unless it exits 0"},
+    "frozen": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "additionalProperties": false, "required": ["sha256", "at"],
+         "properties": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "sha256 of context.md when the owner validated it"},
+                        "at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"}}}
+      ],
+      "description": "null until protocolo --validate-context passes"
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "q", "a", "owner", "status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^Q[0-9]+$"},
+          "q": {"type": "string", "minLength": 1},
+          "a": {"type": ["string", "null"], "description": "the answer, or the measurement with its pointer"},
+          "owner": {"enum": ["claude", "user"], "description": "claude: measurable, answered by research before any AskUserQuestion (R03); user: a decision only he takes"},
+          "status": {"enum": ["open", "answered", "dropped"]}
+        },
+        "allOf": [
+          {"if": {"properties": {"status": {"const": "answered"}}, "required": ["status"]}, "then": {"properties": {"a": {"type": "string", "minLength": 1}}}}
+        ]
+      }
+    },
+    "qa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tests", "code-review", "simplify", "ponytail-review", "security-review"],
+      "description": "R26: the fixed close checklist; each value is the id of the ledger event that records the result, null while missing",
+      "properties": {
+        "tests": {"$ref": "#/$defs/result"},
+        "code-review": {"$ref": "#/$defs/result"},
+        "simplify": {"$ref": "#/$defs/result"},
+        "ponytail-review": {"$ref": "#/$defs/result"},
+        "security-review": {"$ref": "#/$defs/result"}
+      }
+    },
+    "sessions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "Claude Code session ids bound by protocolo --bind"},
+    "rounds": {"type": "integer", "minimum": 0, "default": 0, "description": "R03: AskUserQuestion rounds recorded by protocolo --round; gate.py denies a round at 2 or more. Optional: a gate.json written before the field reads as 0"},
+    "approvals": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "R046: tool_use ids of the AskUserQuestion approvals that protocolo --phase, --validate-context and --qa have spent on a task with a bound session; an id here never approves again. Optional: a gate.json written before the field reads as none"},
+    "repos": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^/"}, "description": "A10: absolute paths of the task's repos, which gate.py lets Claude write in execution. Optional; no protocolo command writes it yet"},
+    "next": {"type": ["string", "null"], "description": "the next command, recomputed on every write"},
+    "updated": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"}
+  },
+  "$defs": {
+    "result": {"type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z-[0-9]+$"}
+  }
+}

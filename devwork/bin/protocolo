@@ -14,7 +14,9 @@
                                      it is GO blocking=0 and newer than the prompt's mtime (FR-004); build the event (id, ts,
                                      project and task_id of the ledger's last line, pointer to the briefing beside it), gate
                                      it with logbook-event.schema.json, run briefing-check on the briefing against the
-                                     ledger plus that event, and only when both pass append it and --seal. Any failure exits
+                                     ledger plus that event, and only when both pass append it and --seal. A description equal
+                                     to the one --handoff computes now from gate.json needs no C1 id when that is briefing-check's
+                                     only FAIL line (a task with no gate.json never qualifies). Any failure exits
                                      1 and writes nothing. After the seal: tasks.md from plan-graph --tasks when plan.md
                                      exists, status.md from gen-status.py when the store holds the task
   protocolo --open <context.md>      write: the receiver's start of leg (C3, FR-004): run the verify of the live
@@ -28,7 +30,8 @@
                                      the raw answer goes to probe-<UTC>.md beside the prompt and "LOAD-PROBE GO|NO-GO
                                      blocking=<n>: <prompt>" to the ledger beside it. Exit 0 only on GO with 0 blocking.
                                      PROTOCOLO_PROBE_CMD replaces the claude command, for --selftest only
-  protocolo --selftest               --close, --probe, --open and --event on scratch fixtures in a temp dir; never a real
+  protocolo --selftest               --close, --probe, --open, --event, --bind, --round, --question, --measured, --answer, --qa, --validate-context, --phase, --load and --handoff on scratch
+                                     fixtures in a temp dir; never a real
                                      ledger, never claude. Last line "selftest: <n> passed, <m> failed"; exit 0 when m=0
   protocolo --event <logbook.jsonl> <type> "<text>" [--pointer <path>] [--task <id|none>] [--project <id>]
                                      write: one mid-leg event (factory logbook 77, protocolo de encuadre N5): built like
@@ -44,6 +47,78 @@
                                      the owner's: write every TODO(model), confirm the candidates, archive the live prompt,
                                      move the draft into next-session-prompt.md, then --close. Update the context.md (D7)
                                      before --wrap: the draft's focus is its next_step
+  protocolo --bind <task> --session <id>   write: add a Claude Code session to the task's gate.json, which it starts in
+                                     discovery when absent (harness v2 R01, A4: a session in no gate.json is not gated),
+                                     and write the index <bind dir>/<id> holding the task folder, which gate.py reads.
+                                     The bind dir is $GATE_BIND_DIR, else $CLAUDE_CONFIG_DIR/state/bind, else
+                                     /Users/you/.claude/state/bind. <task> is a task folder, its context.md, or a task id
+                                     under the task roots
+  protocolo --round <task> [--asked '<json>']   write: record one AskUserQuestion round, rounds + 1 in gate.json (R03:
+                                     gate.py denies a third round), and remove gate.json.round-failed beside it. --asked is
+                                     the round's [{"q": text, "a": answer or null}], which round-record.py passes: a question
+                                     whose q equals a registered one takes its answer; any other is added, owner user,
+                                     answered, or open when its answer is null
+  protocolo --question <task> "<text>" --owner claude|user   write: register one open question before it is asked (R03):
+                                     owner claude is measurable, and gate.py denies AskUserQuestion while it is open; owner
+                                     user is a decision only he takes. Refuses a text already registered
+  protocolo --answer <task> <Qn> "<answer>"   write: the owner records the answer, or the measurement with its pointer, of
+                                     question Qn; it becomes answered
+  protocolo --measured <task> <Qn> "<result>" --pointer <file>   write: the bound session closes its own measurable
+                                     question: Qn must be open with owner claude, and the pointer an existing file whose real
+                                     path is inside the task; a becomes "<result> (pointer: <real path>)", status answered.
+                                     Any refusal writes nothing
+  protocolo --validate-context <task>   write: the owner's validation of context.md (R22): its frontmatter must pass
+                                     task-doc.schema.json; then gate.json records its sha256 (the freeze) and copies its goal,
+                                     entry_when and done_when. Any failure exits 1 and writes nothing
+  protocolo --phase <task> <phase>   write: move gate.json to discovery, planning, execution, qa, closed or continuity (R05).
+                                     Refuses while context.md differs from the frozen hash, refuses to leave discovery without
+                                     entry_when and done_when, and refuses closed while a review item (code-review, simplify,
+                                     ponytail-review, security-review) has no result in <task>/logbook.jsonl (R26: null, or
+                                     an event id the ledger lacks; each is named), then unless done_when exits 0 in the task
+                                     folder; the QA check runs first. The tests item is not read: done_when is the test.
+                                     A move into execution empties qa (R052). Every gate.json write passes gate.schema.json
+                                     first; any refusal writes nothing
+  protocolo --qa <task> <item> <pass|fail> "<text>" [--pointer <path>]   write: record one QA result (R26): appends one
+                                     verification event "QA <item> PASS|FAIL: <text>" to <task>/logbook.jsonl, gated like
+                                     --event, and sets gate.json qa.<item> to its id on pass, to null on fail (a fail reopens
+                                     the item). <item> is tests, code-review, simplify, ponytail-review or security-review.
+                                     Refuses another item, a task with no gate.json or no ledger event, and a closed task;
+                                     any refusal writes nothing
+                                     The caller lock (R046): on a task whose gate.json lists a session, --phase,
+                                     --validate-context and --qa of a review item refuse unless a bound session's transcript,
+                                     <home>/projects/*/<session>.jsonl, ends its last answered AskUserQuestion after the owner's
+                                     last prompt with exactly one question: header Phase and option Mover (the text naming the
+                                     task id and the target phase or validate-context, and no other), or header QA and option
+                                     Registrar (the text naming the task id, the item and no other, and exactly one of pass
+                                     and fail, the call's result). A period ends a word only at a sentence end. The id is
+                                     spent into gate.json approvals and never approves again
+  protocolo --load <task|ticket|term>   read-only (R07, R08, R28): a task (a folder under the task roots, a path, or the one
+                                     task encuadre resolve names) prints context.md, gate.json, the tail of its ledger, the
+                                     world master encuadre resolve names for its project_id, its route items and brain pallet,
+                                     in that order; a world term prints its master and brain pallet only. Each block is capped
+                                     and says what it cut, so the whole stays under 8,000 tokens (chars/4). It stops at the
+                                     first broken input (context.md failing task-doc.schema.json, gate.json failing
+                                     gate.schema.json, a named route item or master that does not exist, a failing brain
+                                     pallet of a world term), names it on the last line and exits 1; it never searches. On a
+                                     task load a failing brain pallet (an exit, a missing or unrunnable brain, a timeout) is
+                                     one warning line and the load goes on, so the session still binds. No gate.json and no
+                                     world are one stated line each. A term that resolves to nothing exits 3. A context.md
+                                     in GRACED_CONTEXT and loaded by its real path is validated without goal, with one grace
+                                     line on stderr. Every block, each route item and a broken input's detail pass the
+                                     guard's --filter (skipped after one warning on stderr when it fails), then MASKS; a
+                                     key-material route item is withheld (R049).
+                                     PROTOCOLO_ENCUADRE, PROTOCOLO_BRAIN, PROTOCOLO_BRAIN_TIMEOUT (seconds, default 60),
+                                     PROTOCOLO_GUARD (default $CLAUDE_CONFIG_DIR/hooks/secret_guard.py) and
+                                     PROTOCOLO_TASK_ROOTS (colon-separated) replace encuadre, brain, its timeout, the guard
+                                     and the task roots, for tests
+  protocolo --handoff <task> [--write]   read-only without --write (R06): prints the next-session-prompt.md of a task built
+                                     only from its gate.json and the last 12 events of its logbook.jsonl (task, phase, goal,
+                                     entry_when, done_when, next, sessions, open questions, snapshot, events), its frontmatter
+                                     gated by continuity.schema.json. Its verify prints the phase and ledger-ok while the
+                                     ledger holds at least the events it had when generated. --write copies the old one to backup/ first, then
+                                     replaces <task>/next-session-prompt.md. Any failure exits 1 and writes nothing
+  protocolo --handoff-check <task> [<handoff.md>]   read-only: counts the state lines and frontmatter keys of a handoff
+                                     (default <task>/next-session-prompt.md) that differ from a fresh --handoff; exit 0 at 0
   protocolo --report [--ledger <logbook.jsonl>]   narrow B1 to one ledger
   protocolo --report [--store <db>]   R3 against another store (a copy, for the control)
 
@@ -66,11 +141,43 @@ ROOTS = ["/Users/you/.devwork/tasks", "/Users/you/work/umbrella/.devwork/tasks"]
 LOG = "/Users/you/work/umbrella/.devwork/logbook.jsonl"
 SCHEMA = "/Users/you/.devwork/_schema/logbook-event.schema.json"
 STORE = "/Users/you/work/umbrella/.devwork/brain.db"
-BC = os.path.join(os.path.dirname(os.path.realpath(__file__)), "briefing-check")
+BIN = "/Users/you/.devwork/bin"
+BC = os.path.join(BIN, "briefing-check")
 REPOS = [f"/Users/you/work/source/{r}" for r in ("api-service", "worker-service", "dashboard-app")]
 SOURCE = "/Users/you/work/source"
 UBIN = "/Users/you/work/umbrella/.devwork/bin"
-GEN_STATUS = os.path.join(os.path.dirname(os.path.realpath(__file__)), "gen-status.py")
+GEN_STATUS = os.path.join(BIN, "gen-status.py")
+
+def schema_file(name):
+    # A schema in ../schema beside the script wins, so a copy under a task's bin/ runs its own; live there is none.
+    local = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "schema", name)
+    return local if os.path.isfile(local) else f"/Users/you/.devwork/_schema/{name}"
+
+GATE_SCHEMA, TASK_SCHEMA = schema_file("gate.schema.json"), schema_file("task-doc.schema.json")
+CONT_SCHEMA = schema_file("continuity.schema.json")
+PHASES = ("discovery", "planning", "execution", "qa", "closed", "continuity")
+QA_ITEMS = ("tests", "code-review", "simplify", "ponytail-review", "security-review")
+# --load stays under LOAD_TOKENS estimated as chars/4: the block caps sum to 29,000 chars, which leaves room for the headers.
+LOAD_TOKENS, LEDGER_TAIL = 8000, 12
+LOAD_CAPS = {"context.md": 5000, "gate.json": 3000, "ledger tail": 4000, "world master": 5500, "route": 5000, "brain pallet": 6500}
+# The context.md files that, at the owner's freeze before 2026-11-16, failed task-doc.schema.json only for the missing goal:
+# --load validates them without goal until a reopen adds it; --validate-context never does.
+# The real path is the key and must be the path loaded: a symlink to a listed file, or into its folder, is not graced.
+GRACED_CONTEXT = ()
+# A route item --load never opens: a .netrc, an id_* key, a .pem, anything under a .ssh folder, a .env file.
+KEY_MATERIAL = re.compile(r"(?:^|/)(?:\.netrc|id_(?:rsa|ed25519|ecdsa|dsa)(?:[_-][^/]*)?|[^/]*\.pem|\.env(?:\.[^/]*)?)$|(?:^|/)\.ssh(?:/|$)", re.I)
+# Run on every printed body, after the guard's --filter when it runs and alone when it cannot; values go, keys stay.
+MASKS = (
+    (re.compile(r"\b((?:proxy-)?authorization|x-api-key)([\"']?\s*[:=]\s*[\"']?(?:(?:bearer|basic|token|digest)\s+)?)[^\s\"',]+", re.I), r"\1\2***"),
+    (re.compile(r"\b([a-z][a-z0-9+.-]*://)[^/\s@\"'<>]+@", re.I), r"\1***@"),
+    (re.compile(r"((?:^|(?<=[\s;|&(\"'`/=]))(?:mysql\w*|mariadb\w*)\s[^\n;|&]*?\s-p)\S+", re.I), r"\1***"),
+    (re.compile(r"(--(?:password|passwd|token|secret|api-?key|access-?key)(?:=|\s+))\S+", re.I), r"\1***"),
+    (re.compile(r"\b([\w.-]*(?:password|passwd|passphrase|secret|token|api_?key|access_?key|private_?key|pwd)\w*"
+                r"(?:\\?[\"'])?\s*(?:=>|=|:)\s*(?:\\?[\"'])?)(?!\d+(?:\.\d+)?(?![^\s\"',;)\]\\]))[^\s\"',;)\]\\]{4,}", re.I), r"\1***"),
+    # A netrc password: the value follows the word with no = or :, at a line start or after a login pair.
+    (re.compile(r"((?:^[ \t]*|\blogin[ \t]+\S+[ \t]+)(?:password|passwd)[ \t]+)[^\s=:]\S*", re.I | re.M), r"\1***"),
+)
+PEM_BEGIN, PEM_END = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), re.compile(r"-----END [A-Z ]*PRIVATE KEY-----")
 QUESTION = ("Read the prompt and the files it references; change nothing; report goal, first three actions, BLOCKING gaps, "
             "non-blocking gaps; end with VERDICT: GO or VERDICT: NO-GO")
 FLOOR = 0.5
@@ -118,12 +225,17 @@ def blocking(ans):
     if not m:
         return 0
     none = re.compile(r"[*_:\s(]*(none|no\b|0\b|n/a|nil)", re.I)
+    # A prose line that says there is none, before any bullet: the bullets after it are confirmations, not gaps.
+    if re.match(r"(?![-*•]\s|\d+[.)]\s)[*_:(\s]*(none|nil|n/a|0\b|no\s+(?:blocking|gaps?)\b)", m[2].lstrip(), re.I):
+        return 0
     items = [i for i in re.findall(r"^\s*(?:[-*•]|\d+[.)])\s+(.*)", m[2], re.M) if not none.match(i)]
     inline = m[1].strip(" *_:")
     return len(items) or int(bool(inline) and not none.match(inline))
 
 if not args or {"-h", "--help"} & set(args) or not {"--report", "--log", "--event", "--close", "--wrap", "--seal",
-                                                     "--open", "--probe", "--selftest", "--ledger", "--store"} & set(args):
+                                                     "--open", "--probe", "--selftest", "--ledger", "--store",
+                                                     "--bind", "--phase", "--validate-context", "--round", "--load",
+                                                     "--handoff", "--handoff-check", "--qa", "--question", "--answer", "--measured"} & set(args):
     print(__doc__.rstrip())
     print("event types: " + ", ".join(json.load(open(SCHEMA))["properties"]["type"]["enum"]))
     sys.exit(0)
@@ -160,7 +272,7 @@ if "--wrap" in args:
     fm = json.loads(subprocess.run(["yq", "--front-matter=extract", "-o=json", ".", ctx], capture_output=True, text=True).stdout or "{}")
     root = fm.get("root") or os.path.dirname(ctx)
     led = fm.get("ledger") or os.path.join(root, "logbook.jsonl")
-    bin_ = os.path.dirname(os.path.realpath(__file__))
+    bin_ = BIN
     # The harness's transcript and memory are found by its adapter tools (--latest, --auto), never here (v4-v7, logbook 163).
     tr, mem = opt("--transcript", "--latest"), opt("--memory", "--auto")
     print(f"== wrap {fm.get('task_id')}: ledger {led}; transcript {tr}; memory {mem} ==")
@@ -191,6 +303,585 @@ if "--wrap" in args:
           f"archive next-session-prompt.md, move the draft into it, then protocolo --close {led} verification \"...\" ==")
     sys.exit(0)
 
+utc = lambda: datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+
+def task_dir(ref):
+    """A task folder from its path, its context.md, or its id under ROOTS; exits 1 when none exists."""
+    p = os.path.abspath(ref or ".")
+    if ref and os.path.basename(p) == "context.md" and os.path.isfile(p):
+        return os.path.dirname(p)
+    if ref and os.path.isdir(p):
+        return p
+    hit = next((f"{r}/{ref}" for r in ROOTS if ref and os.path.isdir(f"{r}/{ref}")), None)
+    return hit or sys.exit(f"== no task folder for {ref!r}; changed: nothing ==")
+
+def load_gate(t):
+    p = os.path.join(t, "gate.json")
+    return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {
+        "task_id": os.path.basename(t), "phase": "discovery", "goal": None, "entry_when": None, "done_when": None,
+        "frozen": None, "questions": [], "qa": dict.fromkeys(QA_ITEMS), "sessions": [], "next": None, "updated": None,
+        "rounds": 0}
+
+def write_gate(t, g):
+    """The only writer of gate.json (R22): the whole file is replaced once gate.schema.json passes on it; else exits 1."""
+    nxt = {"discovery": "planning", "planning": "execution", "execution": "qa", "qa": "closed"}.get(g["phase"])
+    g = g | {"updated": utc(), "next": f"protocolo --validate-context {t}" if not g["frozen"]
+             else nxt and f"protocolo --phase {t} {nxt}"}
+    row = json.dumps(g, ensure_ascii=False, indent=2) + "\n"
+    with tempfile.TemporaryDirectory() as d:
+        open(f"{d}/gate.json", "w", encoding="utf-8").write(row)
+        r = subprocess.run(["check-jsonschema", "--schemafile", GATE_SCHEMA, f"{d}/gate.json"], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(f"{r.stdout[-400:]}== gate.json would fail {GATE_SCHEMA}; changed: nothing ==")
+    open(f"{t}/gate.json.tmp", "w", encoding="utf-8").write(row)
+    os.replace(f"{t}/gate.json.tmp", f"{t}/gate.json")
+    return g
+
+# From here to approval(): a copy of gate.py's last_answer, named, PAIRS, move_key and move_approval (protocolo imports
+# nothing from a hooks folder); proofs/C6-caller.sh runs both on the same transcripts and requires one decision.
+def last_answer(path):
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 2_000_000))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return None
+    last, asked = None, {}
+    for line in lines:
+        if '"user"' not in line and '"AskUserQuestion"' not in line and '"queued_command"' not in line:
+            continue
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(e, dict) or e.get("isSidechain"):
+            continue
+        c = (e.get("message") or {}).get("content")
+        if e.get("type") == "assistant":
+            for b in c if isinstance(c, list) else []:
+                if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "AskUserQuestion":
+                    asked[b.get("id")] = (b.get("input") or {}).get("questions") or []
+            continue
+        if e.get("type") == "attachment":
+            last = None if (e.get("attachment") or {}).get("type") == "queued_command" else last
+            continue
+        if e.get("type") != "user" or e.get("isMeta"):
+            continue
+        if isinstance(c, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c):
+            r = e.get("toolUseResult")
+            if isinstance(r, dict) and isinstance(r.get("answers"), dict) and r["answers"]:
+                ids = [b.get("tool_use_id") for b in c if isinstance(b, dict) and b.get("type") == "tool_result"]
+                last = (r.get("questions") or asked[ids[0]], r["answers"], ids[0]) if ids and all(i in asked for i in ids) else None
+        elif c:
+            last = None
+    return last
+
+def named(text, word):
+    # A period right after the word counts as a boundary only when it ends a sentence: "planning." yes, "planning.md" no.
+    return re.search(r"(?<![\w./-])" + re.escape(word) + r"(?![\w/-]|\.\S)", text) is not None
+
+PAIRS = {"Publish": "Publish", "Phase": "Mover", "QA": "Registrar"}
+
+def move_key(mode, arg):
+    if mode == "--qa":
+        return "QA", arg, QA_ITEMS[1:]
+    return "Phase", "validate-context" if mode == "--validate-context" else arg, PHASES + ("validate-context",)
+
+def move_approval(path, task_id, mode, arg, spent, result=None):
+    got = last_answer(path)
+    if not got or len(got[0]) != 1 or not isinstance(got[0][0], dict) or got[2] in spent:
+        return None
+    header, word, alts = move_key(mode, arg)
+    q, label = got[0][0], PAIRS[header]
+    text = str(q.get("question"))
+    ok = (word and q.get("header") == header and got[1].get(q.get("question")) in (label, [label]) and named(text, task_id)
+          and named(text, word) and not any(named(text, x) for x in alts if x != word)
+          and (mode != "--qa" or [x for x in ("pass", "fail") if named(text, x)] == [result]))
+    return got[2] if ok else None
+
+def approval(g, mode, arg, verb, result=None):
+    """{} for a task no session is bound to; else {"approvals": [..., id]} for the unspent AskUserQuestion approval of
+    this call found in a bound session's transcript, <home>/projects/*/<session>.jsonl (home as --bind resolves it).
+    Exits 1 when none holds it (R046: a script, a renamed copy or a subprocess of the session reaches this check too)."""
+    sessions = [s for s in g.get("sessions") or [] if re.fullmatch(r"[A-Za-z0-9_-]+", s)]
+    if not g.get("sessions"):
+        return {}
+    home, spent = os.environ.get("CLAUDE_CONFIG_DIR") or "/Users/you/.claude", g.get("approvals") or []
+    for p in sorted(p for s in sessions for p in glob.glob(os.path.join(home, "projects", "*", f"{s}.jsonl"))):
+        got = move_approval(p, g["task_id"], mode, arg, spent, result)
+        if got:
+            return {"approvals": spent + [got]}
+    header, word, _ = move_key(mode, arg)
+    sys.exit(f"== {verb}: {g['task_id']} has a bound session, and no AskUserQuestion answered since the owner's last prompt "
+             f"approves `protocolo {mode} {arg or ''}{' ' + result if result else ''}`: the session asks the owner one question "
+             f"with header `{header}`, whose text names `{g['task_id']}` and `{word}`"
+             + (f" and the result `{result}` (not both pass and fail)" if mode == "--qa" else "")
+             + f" as separate words, with no other {'review item' if mode == '--qa' else 'phase'} named, and an option "
+             f"labelled `{PAIRS[header]}`; changed: nothing ==")
+
+if "--bind" in args:
+    t, sid = task_dir(opt("--bind")), opt("--session")
+    if not sid or not re.fullmatch(r"[A-Za-z0-9_-]+", sid):
+        sys.exit("usage: protocolo --bind <task> --session <id>  (id: letters, digits, - and _)")
+    g = load_gate(t)
+    g = write_gate(t, g | {"sessions": g["sessions"] + [sid] * (sid not in g["sessions"])})
+    bind = os.environ.get("GATE_BIND_DIR") or os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or "/Users/you/.claude", "state", "bind")
+    os.makedirs(bind, exist_ok=True)
+    open(os.path.join(bind, sid), "w", encoding="utf-8").write(t + "\n")
+    print(f"== bind: session {sid} on {g['task_id']} ({g['phase']}); wrote {t}/gate.json and {bind}/{sid} ==")
+    sys.exit(0)
+
+ROUND_MARK = "gate.json.round-failed"
+next_qid = lambda qs: f"Q{max([int(x['id'][1:]) for x in qs] + [0]) + 1}"
+
+if "--round" in args:
+    t = task_dir(opt("--round"))
+    if not os.path.isfile(os.path.join(t, "gate.json")):
+        sys.exit(f"== round: no {t}/gate.json; bind the task first; changed: nothing ==")
+    try:
+        asked = json.loads(opt("--asked", "[]"))
+        if not isinstance(asked, list) or not all(isinstance(x, dict) and isinstance(x.get("q"), str) and x["q"].strip()
+                                                  and isinstance(x.get("a"), (str, type(None))) for x in asked):
+            raise ValueError("not a list of {q, a}")
+    except ValueError as e:
+        sys.exit(f"== round: --asked is not [{{\"q\": text, \"a\": answer or null}}] ({e}); changed: nothing ==")
+    g = load_gate(t)
+    qs = [dict(x) for x in g.get("questions") or []]
+    for x in asked:
+        a = x["a"] or None
+        hit = next((y for y in qs if y["q"] == x["q"]), None)
+        if hit is None:
+            qs.append({"id": next_qid(qs), "q": x["q"], "a": a, "owner": "user", "status": "answered" if a else "open"})
+        elif a:
+            hit.update(a=a, status="answered")
+    g = write_gate(t, g | {"rounds": g.get("rounds", 0) + 1, "questions": qs})
+    if os.path.lexists(os.path.join(t, ROUND_MARK)):
+        os.unlink(os.path.join(t, ROUND_MARK))
+    print(f"== round: {g['task_id']} has {g['rounds']} question rounds, {len(asked)} questions recorded; wrote {t}/gate.json ==")
+    sys.exit(0)
+
+if "--question" in args:
+    i = args.index("--question")
+    if len(args) < i + 3 or not args[i + 2].strip() or opt("--owner") not in ("claude", "user"):
+        sys.exit('usage: protocolo --question <task> "<text>" --owner claude|user')
+    t, text = task_dir(args[i + 1]), args[i + 2]
+    if not os.path.isfile(os.path.join(t, "gate.json")):
+        sys.exit(f"== question: no {t}/gate.json; bind the task first; changed: nothing ==")
+    g = load_gate(t)
+    qs = g.get("questions") or []
+    dup = next((x["id"] for x in qs if x["q"] == text), None)
+    if dup:
+        sys.exit(f"== question: {dup} already holds this text; changed: nothing ==")
+    new = {"id": next_qid(qs), "q": text, "a": None, "owner": opt("--owner"), "status": "open"}
+    g = write_gate(t, g | {"questions": qs + [new]})
+    print(f"== question: {new['id']} registered, open, owner {new['owner']}; wrote {t}/gate.json ==")
+    sys.exit(0)
+
+if "--answer" in args:
+    i = args.index("--answer")
+    if len(args) < i + 4 or not args[i + 3].strip():
+        sys.exit('usage: protocolo --answer <task> <Qn> "<answer>"')
+    t, (qid, text) = task_dir(args[i + 1]), args[i + 2:i + 4]
+    g = load_gate(t) if os.path.isfile(os.path.join(t, "gate.json")) else {}
+    qs = [dict(x) for x in g.get("questions") or []]
+    hit = next((x for x in qs if x["id"] == qid), None)
+    if not hit:
+        sys.exit(f"== answer: no question {qid} in {t}/gate.json; changed: nothing ==")
+    hit.update(a=text, status="answered")
+    g = write_gate(t, g | {"questions": qs})
+    print(f"== answer: {qid} answered; wrote {t}/gate.json ==")
+    sys.exit(0)
+
+if "--measured" in args:
+    i, ptr = args.index("--measured"), opt("--pointer")
+    if len(args) < i + 4 or not args[i + 3].strip() or args[i + 3].startswith("--") or not ptr:
+        sys.exit('usage: protocolo --measured <task> <Qn> "<result>" --pointer <file in the task>')
+    t, (qid, text) = task_dir(args[i + 1]), args[i + 2:i + 4]
+    g = load_gate(t) if os.path.isfile(os.path.join(t, "gate.json")) else {}
+    qs = [dict(x) for x in g.get("questions") or []]
+    hit = next((x for x in qs if x["id"] == qid), None)
+    if not hit or hit["owner"] != "claude" or hit["status"] != "open":
+        sys.exit(f"== measured: {qid} is not an open question of owner claude in {t}/gate.json; changed: nothing ==")
+    real = os.path.realpath(ptr)
+    if not os.path.isfile(real) or not real.startswith(os.path.realpath(t) + os.sep):
+        sys.exit(f"== measured: the pointer {ptr} is no existing file inside {t} (symlinks resolved); changed: nothing ==")
+    # gate.schema.json describes a as "the answer, or the measurement with its pointer", so the pointer rides in a.
+    hit.update(a=f"{text} (pointer: {real})", status="answered")
+    g = write_gate(t, g | {"questions": qs})
+    print(f"== measured: {qid} answered with pointer {real}; wrote {t}/gate.json ==")
+    sys.exit(0)
+
+def qa_open(t, g):
+    """[(item, why)] for each review item with no result in <t>/logbook.jsonl: null, or an id the ledger lacks."""
+    led, ids = os.path.join(t, "logbook.jsonl"), set()
+    for l in open(led, encoding="utf-8") if os.path.isfile(led) else ():
+        try:
+            ids.add(json.loads(l).get("id"))
+        except (ValueError, AttributeError):
+            pass
+    qa = g.get("qa") or {}
+    return [(i, f"names {qa[i]}, which {led} does not hold" if qa.get(i) else "has no result")
+            # tests is recorded and never read here: the frozen done_when that the close runs is the test.
+            for i in QA_ITEMS if i != "tests" and (not qa.get(i) or qa[i] not in ids)]
+
+if "--qa" in args:
+    i = args.index("--qa")
+    if len(args) < i + 5 or args[i + 3] not in ("pass", "fail"):
+        sys.exit(f'usage: protocolo --qa <task> <{"|".join(QA_ITEMS)}> <pass|fail> "<text>" [--pointer <path>]')
+    t, (item, verdict, text) = task_dir(args[i + 1]), args[i + 2:i + 5]
+    if item not in QA_ITEMS:
+        sys.exit(f"== qa: {item!r} is not a checklist item ({', '.join(QA_ITEMS)}); changed: nothing ==")
+    if not os.path.isfile(os.path.join(t, "gate.json")):
+        sys.exit(f"== qa: no {t}/gate.json; bind the task first; changed: nothing ==")
+    g, led = load_gate(t), os.path.join(t, "logbook.jsonl")
+    if g["phase"] == "closed":
+        sys.exit(f"== qa: {g['task_id']} is closed and its checklist is final; changed: nothing ==")
+    # tests is the qa-record hook's call from the test run itself, so it needs no approval.
+    spend = approval(g, "--qa", item, "qa", verdict) if item != "tests" else {}
+    prev =[l for l in open(led, encoding="utf-8") if l.strip()] if os.path.isfile(led) else []
+    project = json.loads(prev[-1]).get("project") if prev else None
+    if not project:
+        sys.exit(f"== qa: {led} has no event naming a project; open it with protocolo --event {led} <type> \"<text>\" "
+                 f"--task {g['task_id']} --project <id>; changed: nothing ==")
+    with tempfile.TemporaryDirectory() as d:
+        _, ev, row = build_event(led, "verification", f"QA {item} {verdict.upper()}: {text}",
+                                 os.path.abspath(opt("--pointer", led)), "qa", d, (project, g["task_id"]))
+    # gate.json first: a crash before the append leaves an id the close check refuses, never a result with no event.
+    g = write_gate(t, g | spend | {"qa": (g.get("qa") or dict.fromkeys(QA_ITEMS)) | {item: ev["id"] if verdict == "pass" else None}})
+    with open(led, "a", encoding="utf-8") as f:
+        f.write(row)
+    print(f"== qa: appended {ev['id']} (QA {item} {verdict}) to {led}; gate.json qa.{item} is {g['qa'][item] or 'null'} ==")
+    sys.exit(0)
+
+if "--validate-context" in args:
+    t = task_dir(opt("--validate-context"))
+    ctx = os.path.join(t, "context.md")
+    if not os.path.isfile(ctx):
+        sys.exit(f"== validate-context: no {ctx}; changed: nothing ==")
+    spend = approval(load_gate(t), "--validate-context", "", "validate-context")
+    fm = frontmatter(ctx)
+    with tempfile.TemporaryDirectory() as d:
+        open(f"{d}/fm.json", "w", encoding="utf-8").write(json.dumps(fm))
+        r = subprocess.run(["check-jsonschema", "--schemafile", TASK_SCHEMA, f"{d}/fm.json"], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(f"{r.stdout[-600:]}== validate-context: {ctx} fails {TASK_SCHEMA}; changed: nothing ==")
+    g = write_gate(t, load_gate(t) | spend | {k: fm.get(k) for k in ("goal", "entry_when", "done_when")}
+                   | {"frozen": {"sha256": sha(ctx), "at": utc()}})
+    print(f"== validate-context: {ctx} passes {os.path.basename(TASK_SCHEMA)}; frozen at sha256 {g['frozen']['sha256'][:12]}; "
+          f"wrote {t}/gate.json ==")
+    sys.exit(0)
+
+if "--phase" in args:
+    i = args.index("--phase")
+    if len(args) < i + 3 or args[i + 2] not in PHASES:
+        sys.exit(f"usage: protocolo --phase <task> <{'|'.join(PHASES)}>")
+    t, target = task_dir(args[i + 1]), args[i + 2]
+    g, ctx = load_gate(t), os.path.join(t, "context.md")
+    g = g | approval(g, "--phase", target, "phase")
+    if g["frozen"] and not (os.path.isfile(ctx) and sha(ctx) == g["frozen"]["sha256"]):
+        sys.exit(f"== phase: {ctx} changed after --validate-context; the owner validates it again first; changed: nothing ==")
+    if target != "discovery" and not (g["entry_when"] and g["done_when"]):
+        sys.exit(f"== phase: {g['task_id']} cannot leave discovery without entry_when and done_when in gate.json; write them in "
+                 f"context.md, then protocolo --validate-context {t}; changed: nothing ==")
+    if target == "closed":
+        missing = qa_open(t, g)
+        if missing:
+            sys.exit(f"== phase: the QA checklist of {g['task_id']} is not complete (R26): "
+                     + "; ".join(f"{i} {why}" for i, why in missing)
+                     + f"; record each with protocolo --qa {t} <item> pass \"<text>\"; not closed; changed: nothing ==")
+        try:
+            r = subprocess.run(g["done_when"], shell=True, cwd=t, capture_output=True, text=True, timeout=600)
+        except subprocess.TimeoutExpired:
+            r = subprocess.CompletedProcess(g["done_when"], 124, "", "TIMEOUT after 600 s")
+        if r.returncode != 0:
+            sys.exit(f"{(r.stdout + r.stderr).rstrip()[-600:]}\n== phase: done_when exits {r.returncode}; not closed; changed: nothing ==")
+    # A move into execution reopens the work, so a review passed before it cannot satisfy a later close (R052).
+    g = write_gate(t, g | {"phase": target} | ({"qa": dict.fromkeys(QA_ITEMS)} if target == "execution" else {}))
+    print(f"== phase: {g['task_id']} is {target}; wrote {t}/gate.json; next: {g['next'] or 'none'} ==")
+    sys.exit(0)
+
+if "--load" in args:
+    ref = opt("--load") or sys.exit("usage: protocolo --load <task|ticket|term>")
+    shown = []
+
+    def say(s):
+        shown.append(s)
+        print(s)
+
+    def block(name, text, note=""):
+        cap, text = LOAD_CAPS[name], redact(text)
+        cut = f"\n[truncated: {name} shows {cap} of {len(text)} chars]" if len(text) > cap else ""
+        say(f"## load: {name}{note}\n{text[:cap].rstrip()}{cut}")
+
+    def broken(name, why, detail=""):
+        # The schema check's detail echoes frontmatter values, so it is masked like a body.
+        if detail.strip():
+            print(redact(detail.rstrip())[-600:])
+        print(redact(f"== load: broken input: {name}: {why}; stopped, nothing after it was loaded =="))
+        sys.exit(1)
+
+    guard = [os.environ.get("PROTOCOLO_GUARD") or os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or "/Users/you/.claude",
+                                                               "hooks", "secret_guard.py")]
+
+    def redact(text):
+        """text with its secret values masked (R049): by the guard's --filter (else after one warning), then by MASKS."""
+        if guard:
+            why = "does not exist"
+            if os.path.isfile(guard[0]):
+                try:
+                    r = subprocess.run([sys.executable, guard[0], "--filter"], input=text, capture_output=True,
+                                       encoding="utf-8", errors="replace", timeout=30)
+                    why = None if r.returncode == 0 else f"--filter exits {r.returncode}"
+                    text = r.stdout if why is None else text
+                except (OSError, subprocess.TimeoutExpired) as e:
+                    why = f"--filter cannot run: {type(e).__name__}"
+            if why:
+                print(f"== load: warning: secret guard {guard[0]} {why}; masking with protocolo's own patterns ==", file=sys.stderr)
+                guard.clear()
+        lines, pem = text.split("\n"), False
+        for n, l in enumerate(lines):
+            if pem or PEM_BEGIN.search(l):
+                pem, lines[n] = not PEM_END.search(l), "***PRIVATE KEY REDACTED***"
+        text = "\n".join(lines)
+        for rx, to in MASKS:
+            text = rx.sub(to, text)
+        return text
+
+    def resolve(term):
+        """encuadre resolve rows (kind, id, path); [] when it resolves nothing; a crash is a broken input."""
+        enc = shlex.split(os.environ.get("PROTOCOLO_ENCUADRE") or "") or [os.path.join(BIN, "encuadre")]
+        r = subprocess.run(enc + ["resolve", term], capture_output=True, text=True, timeout=30)
+        rows = [tuple(l.split("\t")) for l in r.stdout.splitlines() if l.count("\t") == 2]
+        if r.returncode and not rows and not (r.stderr + r.stdout).lstrip().startswith("[X]"):
+            broken("encuadre resolve", f"`encuadre resolve {term}` exits {r.returncode}", r.stdout + r.stderr)
+        return rows
+
+    def master(w, path):
+        if not (path.endswith("/master.md") and os.path.isfile(path)):
+            broken("world master", f"{path}, named by encuadre resolve for {w}, does not exist")
+        # Masked before the cut, from a read past the cap, so a secret that straddles the cap is still whole when masked.
+        cap = LOAD_CAPS["world master"]
+        text = redact(open(path, encoding="utf-8", errors="replace").read(cap + 4096))
+        block("world master", text[:cap + 1], f" {w} {path}")
+
+    def pallet(term, task=False):
+        brain = shlex.split(os.environ.get("PROTOCOLO_BRAIN") or "") or [os.path.expanduser("~/.local/bin/brain")]
+        umb = "/Users/you/work/umbrella"
+        try:
+            secs = float(os.environ.get("PROTOCOLO_BRAIN_TIMEOUT") or 60)
+        except ValueError:
+            secs = 60.0
+        try:
+            r = subprocess.run(brain + ["pallet", term], cwd=umb if os.path.isdir(umb) else None, capture_output=True,
+                               encoding="utf-8", errors="replace", timeout=secs)
+            why = None if r.returncode == 0 and r.stdout.strip() else \
+                f"`brain pallet {term}` exits {r.returncode}: {(r.stderr.strip().splitlines() or ['no output'])[0][:200]}"
+        except subprocess.TimeoutExpired:
+            why = f"`brain pallet {term}` timed out after {secs:g} s"
+        except OSError as e:
+            why = f"`brain pallet {term}` cannot run {brain[0]}: {e.strerror or type(e).__name__}"
+        if why:
+            if not task:
+                broken("brain pallet", why)
+            # anchor.py binds only on exit 0, and the gate must not depend on the brain knowing the task.
+            print(redact(f"== load: warning: brain pallet: {why}; no pallet block; the load goes on and the bind is not blocked =="))
+            return
+        block("brain pallet", r.stdout, f" {term}")
+
+    roots = [r for r in os.environ.get("PROTOCOLO_TASK_ROOTS", "").split(":") if r] or ROOTS
+    if "/" in ref:
+        t = os.path.abspath(ref)
+        t = os.path.dirname(t) if os.path.basename(t) == "context.md" else t
+        os.path.isdir(t) or broken("task folder", f"{t} does not exist")
+    else:
+        t = next((f"{r}/{ref}" for r in roots if os.path.isdir(f"{r}/{ref}")), None)
+    worlds = []
+    if t is None:
+        rows = resolve(ref)
+        found, worlds = [r for r in rows if r[0] == "task"], [r for r in rows if r[0] == "world"]
+        if len(found) == 1:
+            t = found[0][2][:-len("/context.md")] if found[0][2].endswith("/context.md") else found[0][2]
+        elif not worlds and found:
+            broken("term", f"{ref} names {len(found)} tasks ({', '.join(r[1] for r in found)}); load one of them by id")
+        elif not worlds:
+            print(f"== load: {ref} resolves to no task and no world; nothing loaded ==")
+            sys.exit(3)
+
+    if t is None:
+        w = worlds[0]
+        say(f"== load: world {w[1]} (from {ref}) ==" + (f"; also {', '.join(x[1] for x in worlds[1:])}" if worlds[1:] else ""))
+        master(w[1], w[2])
+        pallet(w[1])
+    else:
+        ctx = os.path.join(t, "context.md")
+        say(f"== load: task {os.path.basename(t)} at {t} ==")
+        os.path.isfile(ctx) or broken("context.md", f"{ctx} does not exist")
+        fm = frontmatter(ctx)
+        with tempfile.TemporaryDirectory() as d:
+            open(f"{d}/fm.json", "w", encoding="utf-8").write(json.dumps(fm))
+            r = subprocess.run(["check-jsonschema", "--schemafile", TASK_SCHEMA, f"{d}/fm.json"], capture_output=True, text=True)
+            if r.returncode != 0 and ctx in GRACED_CONTEXT and os.path.realpath(ctx) == ctx:
+                s = json.load(open(TASK_SCHEMA, encoding="utf-8"))
+                open(f"{d}/nogoal.json", "w", encoding="utf-8").write(json.dumps(s | {"required": [k for k in s["required"] if k != "goal"]}))
+                if subprocess.run(["check-jsonschema", "--schemafile", f"{d}/nogoal.json", f"{d}/fm.json"], capture_output=True).returncode == 0:
+                    r = None
+                    print(f"== load: grace: {ctx} is an old task in GRACED_CONTEXT; validated without goal, which "
+                          f"--validate-context still requires ==", file=sys.stderr)
+        if r is not None and r.returncode != 0:
+            broken("context.md", f"{ctx} fails {os.path.basename(TASK_SCHEMA)}", r.stdout + r.stderr)
+        block("context.md", open(ctx, encoding="utf-8").read(), f" {ctx}")
+
+        gp = os.path.join(t, "gate.json")
+        if not os.path.isfile(gp):
+            say(f"## load: gate.json\nunbound: {t} has no gate.json yet; protocolo --bind {t} --session <id> starts it in discovery")
+        else:
+            r = subprocess.run(["check-jsonschema", "--schemafile", GATE_SCHEMA, gp], capture_output=True, text=True)
+            if r.returncode != 0:
+                broken("gate.json", f"{gp} fails {os.path.basename(GATE_SCHEMA)}", r.stdout + r.stderr)
+            block("gate.json", open(gp, encoding="utf-8").read(), f" {gp}")
+
+        led = fm.get("ledger") or os.path.join(t, "logbook.jsonl")
+        if not os.path.isfile(led):
+            say(f"## load: ledger tail\nno ledger yet at {led}")
+        else:
+            lines = [l for l in open(led, encoding="utf-8", errors="replace").read().splitlines() if l.strip()]
+            def ev_line(l):
+                try:
+                    e = json.loads(l)
+                    return f"{e.get('id')} {e.get('type')}: {' '.join(str(e.get('text', '')).split())}"
+                except ValueError:
+                    return l
+            # Masked whole, then cut: a secret that straddles the 400-char cut is masked before it is cut.
+            tail = redact("\n".join(ev_line(l) for l in lines[-LEDGER_TAIL:])).split("\n")
+            block("ledger tail", "\n".join(l[:400] for l in tail), f" {led} (last {min(len(lines), LEDGER_TAIL)} of {len(lines)})")
+
+        w = None
+        if not fm.get("project_id"):
+            say("## load: world master\nno world: context.md names no project_id")
+        else:
+            worlds = [r for r in resolve(fm["project_id"]) if r[0] == "world"]
+            if not worlds:
+                say(f"## load: world master\nno world: project_id {fm['project_id']} resolves to no world")
+            else:
+                w = worlds[0][1]
+                master(w, worlds[0][2])
+
+        route = fm.get("route") or []
+        missing = next((i for i in route if i.startswith("/") and not os.path.exists(i)), None)
+        if missing:
+            broken("route item", f"{missing}, named in the route of {ctx}, does not exist")
+        each, items = LOAD_CAPS["route"] // max(1, len(route)), []
+        for i in route:
+            cut = False
+            if not i.startswith("/"):
+                body = "a name, not a path; not checked"
+            elif KEY_MATERIAL.search(i) or KEY_MATERIAL.search(os.path.realpath(i)):
+                items.append(f"route item withheld: {i}")
+                continue
+            elif os.path.isdir(i):
+                body = "folder: " + ", ".join(sorted(os.listdir(i)))
+            else:
+                # Read past the cap so a secret that straddles it is still whole when it is masked.
+                body = open(i, encoding="utf-8", errors="replace").read(each + 4096)
+                cut, body = len(body) > each, redact(body)
+            items.append(f"- {i}\n{body[:each].rstrip()}" + (f"\n[truncated: route item shows {each} chars]" if cut or len(body) > each else ""))
+        block("route", "\n".join(items) or "context.md names no route", f" ({len(route)} items)")
+        pallet(w or os.path.basename(t), task=True)
+
+    n = sum(len(s) + 1 for s in shown)
+    print(f"== load: {len(shown) - 1} blocks, {n} chars, about {n // 4} tokens (chars/4; cap {LOAD_TOKENS}) ==")
+    sys.exit(0)
+
+def handoff(t):
+    """(frontmatter, state rows) of a task's handoff, every value from its gate.json or its ledger; exits 1 without both."""
+    gp, led = os.path.join(t, "gate.json"), os.path.join(t, "logbook.jsonl")
+    if not (os.path.isfile(gp) and os.path.isfile(led)):
+        sys.exit(f"== handoff: {t} needs gate.json and logbook.jsonl; protocolo --bind starts gate.json; changed: nothing ==")
+    g = json.load(open(gp, encoding="utf-8"))
+    lines = [l for l in open(led, encoding="utf-8").read().splitlines() if l.strip()]
+    one = lambda v: "none" if v is None else " ".join(str(v).split())
+    evs, project = [], None
+    for n, l in enumerate(lines, 1):
+        try:
+            e = json.loads(l)
+        except ValueError:
+            e = {}
+        project = e.get("project") or project
+        if n > len(lines) - LEDGER_TAIL:
+            eid = str(e.get("id") or f"line {n}")
+            # The snapshot range uses the id's trailing number, as the ledgers number their events; else the line number.
+            num = re.search(r"(\d+)$", eid)
+            evs.append((int(num[1]) if num else n, eid, one(f"{e.get('type')}: {e.get('text', l)}")[:400]))
+    snap = f"{evs[0][0]}-{evs[-1][0]}" if evs else "0-0"
+    nxt = g["next"]
+    to = re.search(r"--phase \S+ (\w+)$", nxt or "")
+    rows = [("task", g["task_id"]), ("phase", g["phase"]), ("goal", one(g["goal"])), ("entry_when", one(g["entry_when"])),
+            ("done_when", one(g["done_when"])), ("next", one(nxt)), ("sessions", ", ".join(g["sessions"]) or "none")]
+    rows += [(f"question {q['id']}", one(f"{q['owner']}: {q['q']}")) for q in g["questions"] if q["status"] == "open"]
+    rows += [("snapshot", f"ledger events {snap}, the last {len(evs)} of {len(lines)}")] + [(f"event {i}", v) for _, i, v in evs]
+    fm = {"kind": "continuity", "description": f"{g['task_id']}, phase {g['phase']}: {one(g['goal'])}", "form": "paragraph",
+          "project_id": project, "task_id": g["task_id"], "cwd": t,
+          "reads": [f"{t}/{x}" for x in ("context.md", "gate.json", "spec.md", "plan.md", "logbook.jsonl") if os.path.isfile(f"{t}/{x}")],
+          # A floor, not the length: the probe and the close each append one event after the handoff is written.
+          "verify": {"cmd": f'jq -r .phase {shlex.quote(gp)}; [ "$(jq -s length {shlex.quote(led)})" -ge {len(lines)} ] '
+                            f"&& echo ledger-ok || echo ledger-short", "expect": f"{g['phase']}\nledger-ok"},
+          "first_action": nxt, "done_when": g["done_when"],
+          # Only the owner's ! command moves gate.json (R02), so the next step is always his.
+          "focus": {"step": nxt or f"none: gate.json names no next command in phase {g['phase']}",
+                    "expect": f"gate.json phase {to[1]}" if to else "gate.json records context.md as frozen" if nxt
+                    else f"the task stays in phase {g['phase']}", "from": "the owner"},
+          "traps": [], "snapshot": snap,
+          "expires_when": f"gate.json leaves phase {g['phase']}", "source_ref": led}
+    return fm, rows
+
+if "--handoff" in args:
+    t = task_dir(opt("--handoff"))
+    fm, rows = handoff(t)
+    with tempfile.TemporaryDirectory() as d:
+        open(f"{d}/fm.json", "w", encoding="utf-8").write(json.dumps(fm))
+        r = subprocess.run(["check-jsonschema", "--schemafile", CONT_SCHEMA, f"{d}/fm.json"], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(f"{r.stdout[-600:]}== handoff: the frontmatter fails {CONT_SCHEMA}; changed: nothing ==")
+    doc = (f"---\n# yaml-language-server: $schema={CONT_SCHEMA}\n"
+           + "".join(f"{k}: {json.dumps(v, ensure_ascii=False)}\n" for k, v in fm.items())
+           + f"---\n\n# {fm['task_id']}, phase {dict(rows)['phase']}\n\n"
+           f"Generated by `protocolo --handoff` from gate.json and the ledger. Every line below is state: regenerate it, do not "
+           f"edit it. `protocolo --handoff-check {t}` counts the lines that no longer match.\n\n## State\n\n"
+           + "".join(f"- **{k}**: {v}\n" for k, v in rows))
+    if "--write" not in args:
+        print(doc, end="")
+        sys.exit(0)
+    dst, bak = os.path.join(t, "next-session-prompt.md"), None
+    if os.path.exists(dst):
+        bak = os.path.join(t, "backup", f"next-session-prompt.md.{datetime.datetime.now(datetime.timezone.utc):%Y%m%dT%H%M%SZ}")
+        if os.path.exists(bak):
+            sys.exit(f"== handoff: {bak} exists; changed: nothing ==")
+        os.makedirs(os.path.dirname(bak), exist_ok=True)
+        open(bak, "wb").write(open(dst, "rb").read())
+    open(f"{dst}.tmp", "w", encoding="utf-8").write(doc)
+    os.replace(f"{dst}.tmp", dst)
+    print(f"== handoff: wrote {dst}" + (f"; the previous one is {bak}" if bak else "") + " ==")
+    sys.exit(0)
+
+if "--handoff-check" in args:
+    i = args.index("--handoff-check")
+    t = task_dir(args[i + 1] if len(args) > i + 1 else None)
+    doc = args[i + 2] if len(args) > i + 2 else os.path.join(t, "next-session-prompt.md")
+    if not os.path.isfile(doc):
+        sys.exit(f"usage: protocolo --handoff-check <task> [<handoff.md>]  ({doc} does not exist)")
+    fm, rows = handoff(t)
+    sec = re.search(r"^## State\n(.*?)(?=^## |\Z)", open(doc, encoding="utf-8").read(), re.S | re.M)
+    got, want, hfm = dict(re.findall(r"^- \*\*(.+?)\*\*: (.*)$", sec[1] if sec else "", re.M)), dict(rows), frontmatter(doc)
+    bad = [f"state {k}: handoff {got.get(k, '(absent)')!r}, now {want.get(k, '(absent)')!r}"
+           for k in sorted(got.keys() | want.keys()) if got.get(k) != want.get(k)]
+    bad += [f"frontmatter {k}: handoff {hfm.get(k)!r}, now {v!r}" for k, v in fm.items() if hfm.get(k) != v]
+    for b in bad:
+        print(f"  mismatch {b}"[:400])
+    print(f"== handoff-check: {len(bad)} mismatches between {doc} and the gate.json and ledger of {t} ==")
+    sys.exit(1 if bad else 0)
+
 if "--selftest" in args:
     me, res = os.path.realpath(__file__), []
     def case(name, ok):
@@ -198,10 +889,11 @@ if "--selftest" in args:
         print(f"  [{'OK' if ok else 'FAIL'}] {name}")
     # Stubs always set, so no case can reach claude or the real encuadre.
     base = {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"} | {
-        "PROTOCOLO_PROBE_CMD": "false", "PROTOCOLO_ENCUADRE": shlex.join(["sh", "-c", "echo TRAPS-RAN"])}
+        "PROTOCOLO_PROBE_CMD": "false", "PROTOCOLO_ENCUADRE": shlex.join(["sh", "-c", "echo TRAPS-RAN"]), "PROTOCOLO_BRAIN": "false"}
     run = lambda *a, **env: subprocess.run([sys.executable, me, *a], capture_output=True, text=True, env=base | env)
     stub = lambda out: shlex.join(["sh", "-c", f"printf '{out}'"])
     with tempfile.TemporaryDirectory() as d:
+        base["GATE_BIND_DIR"] = f"{d}/bind"
         t = f"{d}/selftest-task"
         os.mkdir(t)
         led, nsp, ctx, sealf = (f"{t}/{n}" for n in ("logbook.jsonl", "next-session-prompt.md", "context.md", "logbook.seal"))
@@ -258,6 +950,280 @@ if "--selftest" in args:
         open(nsp, "a").write("\nNo bench work this leg.\n")
         r = run("--open", ctx)
         case("--open does not check the bench when the handoff only says 'bench' in prose", "bench-develop check" not in r.stdout)
+        case("blocking() is 0 when the body opens with 'None.' and bullets follow", blocking("## BLOCKING gaps\nNone. [V] checked:\n- a\n- b\n- c\n\n## Non-blocking gaps\n- n\n") == 0)
+        case("blocking() counts 2 bullets with no 'none' line", blocking("## BLOCKING gaps\n- the plan is missing\n- the ledger ends early\n\n## Non-blocking gaps\n- n\n") == 2)
+        case("blocking() counts 1 for an inline gap on the heading", blocking("BLOCKING gaps: the plan is missing\nVERDICT: NO-GO\n") == 1)
+        case("blocking() is 0 when the body is 'None.' alone", blocking("## BLOCKING gaps\n\nNone.\n\n## Non-blocking gaps\n- n\n") == 0)
+
+        # From here on a bound task moves only on the owner's approval (R046): a sandbox home whose transcripts approve each move.
+        base["CLAUDE_CONFIG_DIR"] = f"{d}/home"
+        os.makedirs(f"{d}/home/projects/p")
+        nid = iter(range(1, 1000))
+        def approve(sid, header, words):
+            k, label = next(nid), PAIRS[header]
+            q = [{"question": f"Approve {words}?", "header": header, "options": [{"label": label, "description": "yes"}]}]
+            open(f"{d}/home/projects/p/{sid}.jsonl", "a").write("".join(json.dumps(x) + "\n" for x in (
+                {"type": "user", "message": {"role": "user", "content": "go on"}},
+                {"type": "assistant", "message": {"role": "assistant", "content": [
+                    {"type": "tool_use", "id": f"toolu_st{k}", "name": "AskUserQuestion", "input": {"questions": q}}]}},
+                {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": f"toolu_st{k}",
+                                                                         "content": "ok"}]},
+                 "toolUseResult": {"questions": q, "answers": {q[0]["question"]: label}}})))
+            return f"toolu_st{k}"
+
+        def task(name, done):
+            t = f"{d}/{name}"
+            os.mkdir(t)
+            open(f"{t}/context.md", "w").write(
+                f"---\nkind: task-context\nrole: fixture\ntask_id: {name}\nroot: {t}\npara: fixture\ngoal: fixture goal\nstate: open\n"
+                f"where_we_are: fixture\nentry_when: \"true\"\ndone_when: {json.dumps(done)}\nledger: {t}/logbook.jsonl\n"
+                "created: \"2026-01-01\"\nupdated: \"2026-01-01\"\nsource_ref: selftest\n---\n\nfixture\n")
+            return t
+        raw = lambda t: open(f"{t}/gate.json", "rb").read() if os.path.exists(f"{t}/gate.json") else b""
+        gate = lambda t: json.loads(raw(t) or "{}")
+        last_of = lambda p: json.loads(open(p, encoding="utf-8").read().splitlines()[-1])
+        t2 = task("phase-task", "test -f done.flag")
+        r = run("--bind", t2, "--session", "s-1")
+        case("--bind starts gate.json in discovery with the session",
+             r.returncode == 0 and gate(t2).get("phase") == "discovery" and gate(t2).get("sessions") == ["s-1"])
+        case("--bind writes the session index that gate.py reads",
+             os.path.isfile(f"{d}/bind/s-1") and open(f"{d}/bind/s-1").read().strip() == t2)
+        r = run("--round", t2)
+        case("--round adds one question round to gate.json", r.returncode == 0 and gate(t2).get("rounds") == 1)
+        r = run("--question", t2, "Is the tail 12 events?", "--owner", "claude")
+        g0 = raw(t2); r2 = run("--question", t2, "Is the tail 12 events?", "--owner", "user")
+        case("--question registers an open question, and refuses its text a second time writing nothing",
+             r.returncode == 0 and gate(t2)["questions"] == [{"id": "Q1", "q": "Is the tail 12 events?", "a": None,
+                                                              "owner": "claude", "status": "open"}]
+             and r2.returncode == 1 and raw(t2) == g0)
+        os.makedirs(f"{t2}/research", exist_ok=True)
+        open(f"{d}/outside.txt", "w").write("12\n")
+        os.symlink(f"{d}/outside.txt", f"{t2}/research/link.txt")
+        g0 = raw(t2); r = run("--measured", t2, "Q1", "12 events", "--pointer", f"{t2}/research/link.txt")
+        case("--measured refuses a pointer that resolves outside the task, writing nothing", r.returncode == 1 and raw(t2) == g0)
+        open(f"{t2}/research/tail.txt", "w").write("12\n")
+        r = run("--measured", t2, "Q1", "12 events", "--pointer", f"{t2}/research/tail.txt")
+        case("--measured answers an open owner-claude question with the result and the pointer's real path",
+             r.returncode == 0 and gate(t2)["questions"][0]["status"] == "answered"
+             and gate(t2)["questions"][0]["a"] == f"12 events (pointer: {os.path.realpath(t2)}/research/tail.txt)")
+        run("--question", t2, "Merge?", "--owner", "user")
+        open(f"{t2}/gate.json.round-failed", "w").write("fixture\n")
+        r = run("--round", t2, "--asked", json.dumps([{"q": "Merge?", "a": "yes"}, {"q": "Ship?", "a": None}]))
+        case("--round --asked answers a question by its text, adds an unregistered one, and removes the failure mark",
+             r.returncode == 0 and gate(t2)["rounds"] == 2 and not os.path.lexists(f"{t2}/gate.json.round-failed")
+             and [(x["id"], x["a"], x["status"]) for x in gate(t2)["questions"][1:]] == [("Q2", "yes", "answered"), ("Q3", None, "open")])
+        g0 = raw(t2); r = run("--answer", t2, "Q9", "no"); kept = raw(t2) == g0; r2 = run("--answer", t2, "Q3", "ship on Monday")
+        case("--answer refuses an unknown id writing nothing, then records Q3 as answered",
+             r.returncode == 1 and kept and r2.returncode == 0 and gate(t2)["questions"][2]["a"] == "ship on Monday"
+             and gate(t2)["questions"][2]["status"] == "answered")
+        g0 = raw(t2); r = run("--phase", t2, "planning")
+        case("--phase on a bound task refuses with no AskUserQuestion approval and writes nothing",
+             r.returncode == 1 and "header `Phase`" in r.stderr and raw(t2) == g0)
+        approve("s-1", "Phase", "phase-task planning")
+        r = run("--phase", t2, "planning")
+        case("--phase refuses to leave discovery before --validate-context", r.returncode == 1 and gate(t2).get("phase") == "discovery")
+        approve("s-1", "Phase", "phase-task validate-context")
+        r = run("--validate-context", t2)
+        case("--validate-context freezes context.md and copies goal and done_when to gate.json",
+             r.returncode == 0 and (gate(t2).get("frozen") or {}).get("sha256") == sha(f"{t2}/context.md")
+             and gate(t2).get("goal") == "fixture goal" and gate(t2).get("done_when") == "test -f done.flag")
+        approve("s-1", "Phase", "phase-task planning")
+        r = run("--phase", t2, "planning")
+        case("--phase writes gate.json on a phase change", r.returncode == 0 and gate(t2).get("phase") == "planning")
+        led2 = f"{t2}/logbook.jsonl"
+        open(led2, "w").write(json.dumps({"id": "2026-01-01T00:00:00Z-1", "ts": "2026-01-01T00:00:00Z", "type": "decision",
+                                          "project": "devwork-infra", "task_id": "phase-task",
+                                          "pointer": {"kind": "path", "value": led2}, "text": "fixture"}) + "\n")
+        g0, l0 = raw(t2), open(led2, "rb").read(); r = run("--qa", t2, "lint", "pass", "x")
+        case("--qa refuses an item outside the checklist and writes nothing",
+             r.returncode == 1 and "not a checklist item" in r.stderr and raw(t2) == g0 and open(led2, "rb").read() == l0)
+        for item in QA_ITEMS[:4]:
+            approve("s-1", "QA", f"phase-task {item} pass")
+            run("--qa", t2, item, "pass", f"{item} fixture")
+        approve("s-1", "Phase", "phase-task closed")
+        g0 = raw(t2); r = run("--phase", t2, "closed")
+        case("--phase closed refused while a QA item has no ledger result, naming it",
+             r.returncode == 1 and "security-review has no result" in r.stderr and "simplify" not in r.stderr and raw(t2) == g0)
+        approve("s-1", "QA", "phase-task security-review pass")
+        r = run("--qa", t2, "security-review", "pass", "fixture")
+        case("--qa pass appends one verification event and stores its id in gate.json",
+             r.returncode == 0 and last_of(led2)["type"] == "verification" and gate(t2)["qa"]["security-review"] == last_of(led2)["id"])
+        r = run("--qa", t2, "tests", "fail", "fixture")
+        case("--qa fail after a pass appends one event and reopens the item",
+             r.returncode == 0 and last_of(led2)["text"] == "QA tests FAIL: fixture" and gate(t2)["qa"]["tests"] is None)
+        good, ghost = raw(t2), gate(t2)
+        ghost["qa"]["simplify"] = "2026-01-01T00:00:00Z-99"
+        open(f"{t2}/gate.json", "w").write(json.dumps(ghost))
+        approve("s-1", "Phase", "phase-task closed")
+        g0 = raw(t2); r = run("--phase", t2, "closed")
+        case("--phase closed refused while a QA item names an event id the ledger lacks",
+             r.returncode == 1 and "simplify names 2026-01-01T00:00:00Z-99" in r.stderr and raw(t2) == g0)
+        open(f"{t2}/gate.json", "wb").write(good)
+        approve("s-1", "Phase", "phase-task closed")
+        g0 = raw(t2); r = run("--phase", t2, "closed")
+        case("--phase closed refused while done_when fails", r.returncode == 1 and "done_when exits 1" in r.stderr and raw(t2) == g0)
+        open(f"{t2}/done.flag", "w").close()
+        r = run("--phase", t2, "closed")
+        case("--phase closed passes once done_when exits 0 and the 4 review items are recorded, tests still open",
+             r.returncode == 0 and gate(t2).get("phase") == "closed" and gate(t2)["qa"]["tests"] is None)
+        open(f"{t2}/context.md", "a").write("edited after the validation\n")
+        approve("s-1", "Phase", "phase-task execution")
+        g0 = raw(t2); r = run("--phase", t2, "execution")
+        case("--phase refused once context.md differs from its frozen hash", r.returncode == 1 and raw(t2) == g0)
+        t3 = task("nodone-task", None)
+        rv, r = run("--validate-context", t3), run("--phase", t3, "planning")
+        case("--phase refuses to leave discovery with no done_when",
+             rv.returncode == 0 and r.returncode == 1 and gate(t3).get("phase") == "discovery")
+        t4 = task("nogoal-task", "true")
+        open(f"{t4}/context.md", "w").write(open(f"{t4}/context.md").read().replace("goal: fixture goal\n", ""))
+        r = run("--validate-context", t4)
+        case("--validate-context refuses a context.md with no goal and writes nothing", r.returncode == 1 and not raw(t4))
+
+        os.makedirs(f"{d}/worlds/w1")
+        open(f"{d}/worlds/w1/master.md", "w").write("MASTER-W1\n")
+        os.makedirs(f"{d}/worlds/wbig")
+        open(f"{d}/worlds/wbig/master.md", "w").write("big master line\n" * 5000)
+        enc = shlex.join(["sh", "-c", 'test -d "$W/$2" && printf "world\\t%s\\t%s\\n" "$2" "$W/$2/master.md" '
+                          '|| { echo "[X] $2 resolves to no world" >&2; exit 1; }', "encuadre"])
+        lenv = {"PROTOCOLO_ENCUADRE": enc, "W": f"{d}/worlds", "PROTOCOLO_TASK_ROOTS": d,
+                "PROTOCOLO_BRAIN": shlex.join(["sh", "-c", 'printf "PALLET-%s\\n" "$2"', "brain"])}
+        def ltask(name, extra):
+            t = task(name, "true")
+            s = open(f"{t}/context.md").read()
+            open(f"{t}/context.md", "w").write(s.replace("ledger:", extra + "ledger:", 1))
+            return t
+        t5 = ltask("load-task", f"project_id: w1\nroute:\n  - {d}/load-task/context.md\n")
+        open(f"{t5}/logbook.jsonl", "w").write(json.dumps({"id": "e-1", "type": "decision", "text": "LEDGER-1"}) + "\n")
+        run("--bind", t5, "--session", "s-load")
+        r = run("--load", "load-task", **lenv)
+        heads = [m[1] for m in re.finditer(r"^## load: (context\.md|gate\.json|ledger tail|world master|route|brain pallet)\b", r.stdout, re.M)]
+        case("--load prints context.md, gate.json, ledger tail, world master, route and brain pallet in that order",
+             r.returncode == 0 and heads == ["context.md", "gate.json", "ledger tail", "world master", "route", "brain pallet"]
+             and "LEDGER-1" in r.stdout and "MASTER-W1" in r.stdout and "PALLET-w1" in r.stdout)
+        r = run("--load", "nogoal-task", **lenv)
+        case("--load stops at a context.md that fails task-doc and names it last",
+             r.returncode == 1 and "context.md" in r.stdout.splitlines()[-1] and "## load: gate.json" not in r.stdout)
+        ltask("route-task", f"route:\n  - {d}/nowhere.md\n")
+        r = run("--load", "route-task", **lenv)
+        case("--load stops at a missing route item and names it last",
+             r.returncode == 1 and f"route item: {d}/nowhere.md" in r.stdout.splitlines()[-1] and "## load: brain pallet" not in r.stdout)
+        r = run("--load", "load-task", **lenv | {"PROTOCOLO_BRAIN": "false"})
+        case("--load of a task with a failing brain pallet warns once and exits 0",
+             r.returncode == 0 and r.stdout.count("warning: brain pallet") == 1 and "## load: brain pallet" not in r.stdout)
+        r = run("--load", "w1", **lenv | {"PROTOCOLO_BRAIN": "false"})
+        case("--load of a world term stops at a failing brain pallet and names it last",
+             r.returncode == 1 and "brain pallet" in r.stdout.splitlines()[-1])
+        ltask("big-task", "project_id: wbig\n")
+        r = run("--load", "big-task", **lenv)
+        case("--load caps an oversized master under 8,000 tokens and says what it cut",
+             r.returncode == 0 and len(r.stdout) <= LOAD_TOKENS * 4 and "[truncated: world master" in r.stdout)
+        r = run("--load", "w1", **lenv)
+        case("--load of a world term prints its master and brain pallet only",
+             r.returncode == 0 and "MASTER-W1" in r.stdout and "## load: brain pallet w1" in r.stdout and "## load: context.md" not in r.stdout)
+        ltask("plain-task", "project_id: nowhere\n")
+        r = run("--load", "plain-task", **lenv)
+        case("--load states no gate.json and no world in one line each",
+             r.returncode == 0 and re.search(r"^unbound: ", r.stdout, re.M) and re.search(r"^no world: ", r.stdout, re.M))
+        r = run("--load", "zz-nothing", **lenv)
+        case("--load of a term that resolves to nothing exits 3", r.returncode == 3 and "## " not in r.stdout)
+
+        t6, hf = task("handoff-task", "true"), f"{d}/handoff.md"
+        run("--bind", t6, "--session", "s-h1")
+        approve("s-h1", "Phase", "handoff-task validate-context")
+        run("--validate-context", t6)
+        open(f"{t6}/logbook.jsonl", "w").write("".join(json.dumps({
+            "id": f"2026-01-01T00:00:{i:02d}Z-{i}", "ts": f"2026-01-01T00:00:{i:02d}Z", "type": "decision", "project": "devwork-infra",
+            "task_id": "handoff-task", "pointer": {"kind": "path", "value": f"{t6}/context.md"}, "text": f"H-EVENT-{i}"}) + "\n" for i in range(1, 15)))
+        r = run("--handoff", t6)
+        open(hf, "w").write(r.stdout)
+        open(f"{d}/handoff-fm.json", "w").write(json.dumps(frontmatter(hf)))
+        ok = subprocess.run(["check-jsonschema", "--schemafile", CONT_SCHEMA, f"{d}/handoff-fm.json"], capture_output=True).returncode == 0
+        case("--handoff prints a handoff that passes continuity.schema.json and writes nothing",
+             r.returncode == 0 and ok and not os.path.exists(f"{t6}/next-session-prompt.md"))
+        case("--handoff covers the last 12 ledger events as snapshot 3-14",
+             'snapshot: "3-14"' in r.stdout and "H-EVENT-14" in r.stdout and "H-EVENT-3" in r.stdout and "H-EVENT-2" not in r.stdout)
+        v = frontmatter(hf).get("verify") or {}
+        out = subprocess.run(v.get("cmd") or "false", shell=True, capture_output=True, text=True).stdout
+        case("the verify of a generated handoff prints its expect", out.strip() == v.get("expect"))
+        def mism(*doc):
+            r = run("--handoff-check", t6, *doc)
+            m = re.search(r"(\d+) mismatches", r.stdout)
+            return r.returncode, int(m[1]) if m else -1
+        case("--handoff-check finds 0 mismatches in a fresh handoff", mism(hf) == (0, 0))
+        run("--event", f"{t6}/logbook.jsonl", "decision", "one more")
+        rc, n = mism(hf)
+        case("--handoff-check counts mismatches after one more ledger event", rc == 1 and n >= 1)
+        open(f"{t6}/next-session-prompt.md", "w").write("hand-written\n")
+        r = run("--handoff", t6, "--write")
+        baks = glob.glob(f"{t6}/backup/next-session-prompt.md.*")
+        case("--handoff --write keeps a hand-written handoff under backup/ and writes the generated one",
+             r.returncode == 0 and len(baks) == 1 and open(baks[0]).read() == "hand-written\n"
+             and open(f"{t6}/next-session-prompt.md").read().startswith("---\n"))
+        before = mism()
+        approve("s-h1", "Phase", "handoff-task planning")
+        run("--phase", t6, "planning")
+        rc, n = mism()
+        case("--handoff-check counts mismatches after a phase change", before == (0, 0) and rc == 1 and n >= 1)
+        r = run("--handoff", t4, "--write")
+        case("--handoff refuses a task with no gate.json and writes nothing",
+             r.returncode == 1 and not os.path.exists(f"{t4}/next-session-prompt.md"))
+
+        # The order handoff, probe, close: a generated handoff closes, and its verify holds after the two events.
+        t7 = task("close-task", "true")
+        led7, nsp7, seal7 = f"{t7}/logbook.jsonl", f"{t7}/next-session-prompt.md", f"{t7}/logbook.seal"
+        run("--bind", t7, "--session", "s-c1")
+        approve("s-c1", "Phase", "close-task validate-context")
+        run("--validate-context", t7)
+        open(led7, "w").write("".join(json.dumps({
+            "id": f"2026-01-01T00:00:{i:02d}Z-{i}", "ts": f"2026-01-01T00:00:{i:02d}Z", "type": "decision", "project": "devwork-infra",
+            "task_id": "close-task", "pointer": {"kind": "path", "value": f"{t7}/context.md"}, "text": f"C-EVENT-{i}"}) + "\n" for i in range(1, 6)))
+        run("--handoff", t7, "--write")
+        gen = open(nsp7, encoding="utf-8").read()
+        run("--probe", nsp7, PROTOCOLO_PROBE_CMD=stub("BLOCKING gaps: none\\nVERDICT: GO\\n"))
+        s7 = lambda: (open(led7, "rb").read(), open(seal7, "rb").read() if os.path.exists(seal7) else b"")
+        # An empty fixture store: briefing-check must not need the real one to run here.
+        import sqlite3
+        db7 = f"{d}/store7.db"
+        sqlite3.connect(db7).executescript(
+            "CREATE TABLE gotcha(id, body_md, superseded_by); CREATE TABLE lesson(id, symptom_effect, operating_rule, superseded_by);"
+            "CREATE TABLE scope_entry(value, notes); CREATE TABLE pipeline_stage(project_id, ord, name, description);"
+            "CREATE TABLE ruled_out(id, claim);")
+        def close7(doc):
+            # The prompt is made older than the GO probe, so only briefing-check can refuse.
+            open(nsp7, "w", encoding="utf-8").write(doc)
+            os.utime(nsp7, (time.time() - 100,) * 2)
+            s0 = s7(); r = run("--close", led7, "verification", "fixture close of a generated handoff", "--store", db7)
+            return r, s7() == s0
+        bc_refused = lambda r: r.returncode == 1 and "briefing-check failed" in r.stdout + r.stderr and "C1 not required" not in r.stdout
+        r, kept = close7(re.sub(r"^description: .*$", 'description: "close-task, phase discovery: a summary written by hand"', gen,
+                                count=1, flags=re.M))
+        case("--close refuses a handoff whose description was edited by hand to cite no id, and writes nothing", bc_refused(r) and kept)
+        r, kept = close7(gen.replace("\ndescription: ", '\nlocked: ["a decision that cites no id"]\ndescription: ', 1))
+        case("--close refuses a generated description beside a second failing claim, and writes nothing", bc_refused(r) and kept)
+        os.rename(f"{t7}/gate.json", f"{t7}/gate.json.off")
+        r, kept = close7(gen)
+        os.rename(f"{t7}/gate.json.off", f"{t7}/gate.json")
+        case("--close gives no C1 exemption to a task with no gate.json, and writes nothing", bc_refused(r) and kept)
+        n7 = len([l for l in open(led7) if l.strip()])
+        r, _ = close7(gen)
+        case("--close of a generated handoff after a GO probe exits 0, says C1 is not required, appends one event and seals",
+             r.returncode == 0 and "C1 not required" in r.stdout and len([l for l in open(led7) if l.strip()]) == n7 + 1
+             and last_of(led7)["text"] == "fixture close of a generated handoff"
+             and os.path.exists(seal7) and open(seal7).read().splitlines()[-1].split("\t")[0] == str(n7 + 1))
+        v7 = frontmatter(nsp7).get("verify") or {}
+        sh = lambda cmd: subprocess.run(["sh", "-c", cmd], capture_output=True, text=True).stdout.strip()
+        case("the verify of a generated handoff still prints its expect after the probe and the close", sh(v7.get("cmd") or "false") == v7.get("expect"))
+        r = run("--open", f"{t7}/context.md")
+        case("--open passes the verify of a generated handoff after the probe and the close", "-- verify (next-session-prompt.md): PASS" in r.stdout)
+        cp = f"{d}/close-copy"
+        os.mkdir(cp)
+        open(f"{cp}/logbook.jsonl", "w").write("".join(open(led7).readlines()[:4]))
+        open(f"{cp}/gate.json", "w").write(json.dumps(gate(t7) | {"phase": "planning"}))
+        moved = lambda name: (v7.get("cmd") or "").replace(f"{t7}/{name}", f"{cp}/{name}")
+        case("the verify of a generated handoff does not print its expect on a ledger copy shorter than at generation",
+             f"{cp}/logbook.jsonl" in moved("logbook.jsonl") and sh(moved("logbook.jsonl")) != v7.get("expect"))
+        case("the verify of a generated handoff does not print its expect on a gate.json copy in another phase",
+             f"{cp}/gate.json" in moved("gate.json") and sh(moved("gate.json")) != v7.get("expect"))
     print(f"selftest: {sum(res)} passed, {len(res) - sum(res)} failed")
     sys.exit(0 if all(res) else 1)
 
@@ -365,7 +1331,7 @@ if "--open" in args:
             c = subprocess.run(["git", "log", "-1", "--format=%ct", want, "--"], cwd=f"{SOURCE}/{name}", capture_output=True, text=True).stdout.strip()
             why += [f"{name}: a commit on {want} after the seal"] if c and int(c) > epoch(ts[0]) else []
     if why:
-        enc = shlex.split(os.environ.get("PROTOCOLO_ENCUADRE") or "") or [os.path.join(os.path.dirname(os.path.realpath(__file__)), "encuadre")]
+        enc = shlex.split(os.environ.get("PROTOCOLO_ENCUADRE") or "") or [os.path.join(BIN, "encuadre")]
         r = subprocess.run(enc + ["traps", ctx], capture_output=True, text=True)
         print(f"-- traps ({'; '.join(why)}): exit {r.returncode}\n{(r.stdout + r.stderr).rstrip()}")
         notes.append(f"traps exit {r.returncode}")
@@ -404,8 +1370,15 @@ if "--close" in args:
             t.write("".join(lines) + row)
         r = subprocess.run([sys.executable, BC, brief,
                             "--logbook", f"{d}/logbook.jsonl"] + store, capture_output=True, text=True)
-        if r.returncode != 0:
-            sys.exit(f"{r.stdout}{r.stderr}== close: briefing-check failed on {brief}; changed: nothing ==")
+    # The description --handoff generates cites no id; C1 is waived for it alone, and only when it is the one failure.
+    exempt = r.returncode == 1 and r.stdout.rstrip().endswith("== changed: nothing (read-only) ==") \
+        and [l for l in r.stdout.splitlines() if l.startswith("  [FAIL]")] == ["  [FAIL] description ids [] C1 no logbook id"] \
+        and all(os.path.isfile(os.path.join(here, x)) for x in ("gate.json", "logbook.jsonl")) \
+        and frontmatter(brief).get("description") == handoff(here)[0]["description"]
+    if r.returncode != 0 and not exempt:
+        sys.exit(f"{r.stdout}{r.stderr}== close: briefing-check failed on {brief}; changed: nothing ==")
+    if exempt:
+        print("-- briefing-check: description is the generated one, C1 not required")
     with open(led, "a", encoding="utf-8") as f:
         f.write(row)
     print(f"== close: appended {ev['id']} ({etype}); briefing-check OK; sealing ==")
@@ -498,7 +1471,7 @@ print(f"  [{'FAIL' if noledger else 'OK'}] {len(live)} active tasks, {len(noledg
 
 print("== L1: assert-lint over every task's verifies (report only; assert-lint-20261003) ==")
 checks = sorted(p for r in ROOTS for pat in ("*-apply.sh", "check-*.py") for p in glob.glob(f"{r}/*/**/{pat}", recursive=True))
-r = subprocess.run([os.path.join(os.path.dirname(os.path.realpath(__file__)), "assert-lint"), *checks], capture_output=True, text=True)
+r = subprocess.run([os.path.join(BIN, "assert-lint"), *checks], capture_output=True, text=True)
 pins = [l for l in r.stdout.splitlines() if l.strip()]
 print(f"  [{'WARN' if pins else 'OK'}] {len(checks)} files, {len(pins)} verify lines pin live state to a literal" + "".join(f"\n      {l[:160]}" for l in pins))
 

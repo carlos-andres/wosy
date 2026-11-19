@@ -1,95 +1,45 @@
 # Global
 
 ## Working rules
-
 - Verify state with a command. A hash is not content. Code inside HTML does not mean the command exists.
-- A rule here that names no command is human judgment. No mechanism enforces it.
-- Read the migrations or run `DESCRIBE` before you write SQL. Never invent a column name.
 - Check `php -v`, `which <tool>` or `--version` before you assume a version or a path.
-- This file is advisory. A pin in `settings.json` and a hook are both deterministic. If something must always happen, pin it or hook it in the resolved Claude home, never write a rule here.
 - Stop at a safety control. A denial decides the change, not the tool. Do not retry the same edit through `sed`, a heredoc, or a subagent. Hand the user a self-verifying applier.
-- Resolve the Claude home from `$CLAUDE_CONFIG_DIR`, or from the directory the transcript path sits in. **Never assume `~/.claude`.** A session can run against another home, and reading the wrong one reports a configuration that is not in force.
+- Read-only by default for any tool that touches production. Confirm in chat before a mutation, even after a general approval.
+- Read what the nearest `.devwork/` holds when it is present, and never assume a file it may not carry. A project CLAUDE.md is additive, so read it as the table of contents and do not repeat the discovery it records.
+- A draft, a scratch note or a mid-task recap goes in `.devwork/_scratch/`.
+- `$EDITOR` opens an external application. Never call `nano` or `vim` for content the user will edit. Use the Edit tool, or print the content for the user to paste.
 
 ## Pre-flight before coding
-
 - State your assumptions before you implement. If the request has two readings, ask.
 - Turn the task into a condition a command can test. "Fix the bug" becomes "write the test that reproduces it, then make it pass".
-- Ask whether a senior engineer would call the result overcomplicated. If 200 lines fit in 50, rewrite before you show it.
 - Match the style of the file you edit. If you must deviate, say so first.
-- Comments follow their own rule, not the file's density. Default to none. Write one line only for a why the code cannot say: a gotcha, a business rule, a workaround. Never narrate what the code does, restate a name or type, leave commented-out code, add a section banner, or add an @param/@return that repeats the signature. Leave existing comments on lines you did not change.
-- Unrelated dead code stays. Report it in the summary. Remove only the orphans your own change created.
 
-## Direct execution
-
-Use the installed tool and not a wrapper. Read-only by default: `SELECT`, `DESCRIBE`, `SHOW`, `EXPLAIN`. Confirm before any write, any DDL and any mutation.
-
-- Detect the database engine from `.env DB_CONNECTION`, from `DATABASE_URL`, from a compose file, or from the migrations. Credentials live in `.envrc` or `.env`, and you must not repeat them in a query.
-- Run a remote command over `ssh <alias> "<command>"` when the nearest `.devwork/` documents the alias. Verify it with `ssh -G <alias>` before you call it missing. A mutation needs the user to confirm it.
+## Command output
+Treat it as the complete result: run commands normally, and batch related commands into one call to avoid extra turns.
 
 ## Secret hygiene
-
-The transcript exposes every secret that reaches it. The harness captures raw stdout and stderr. Redact before a command prints, because you cannot un-leak it after.
-
-- Never dump a config file that carries secrets. Grep the key names only, or mask the values with `rg -o '^KEY=' | sed -E 's/=.*/=***/'`.
 - Assume application code leaks a credential inside an error. A trace embeds a connection string. Pipe a command that may throw through a redactor: `2>&1 | sed -E 's#://[^@/ ]+@#://***:***@#g'`.
 - A probe asserts presence and connectivity as a boolean, never a value. Print `set: yes` and `connect: OK`. Do not echo a host, a user or an endpoint unless the user needs it.
 - If a secret leaks, say so in the summary and recommend rotation.
-- `secret_guard.py` enforces this. Every denial names the safe form. Count them in the transcripts when you need the rate, never from a number written here.
-- PII reaches the transcript only as a token (`<email:1a2b3c4d>`) or a first name, and the guard enforces that too. Open a `.csv`, `.tsv` or `.out` that holds personal data with the Read tool, and run `rg`, `sed` or `awk` on the redacted copy it names. A Bash command on the original is denied, because its rows can arrive without the header the column mask needs.
-
-## Artifact location
-
-Write every generated markdown file inside `.devwork/`. Never write one to the project root, to `~/Desktop`, to `/tmp` or to the home directory.
-
-- A real artifact goes in its subfolder: `.devwork/plans/`, `.devwork/specs/`, `.devwork/schema/`, `.devwork/tasks/<id>/`, `.devwork/decisions/`, `.devwork/research/`.
-- A draft, a scratch note or a mid-task recap goes in `.devwork/_scratch/`.
-- A repository's own `.devwork/` holds repo-level cards only (`context.md`, `constitution.md`, `flows/`). Read it for orientation and never put a task, a plan, a spec, a query or a scratch file there (decided at the last reinstall, recorded 2026-10-14).
-- `.devwork/` is the convention. The toolchain knows no other name, so recognize a different one and never add a second.
-- Do not assume a hook enforces this. Read `settings.json` in the resolved Claude home when the answer matters.
-
-Source, config and test files follow the conventions of their project.
-
-## Editor handoff
-
-`$EDITOR` opens an external application. Never call `nano` or `vim` for content the user will edit. Use the Edit tool, or print the content for the user to paste.
-
-## Project-level config
-
-Read what the nearest `.devwork/` holds when it is present, and never assume a file it may not carry. A project CLAUDE.md is additive, so read it as the table of contents and do not repeat the discovery it records.
 
 ## Verification before declaring done
-
 - Run the test, the build or the smoke command. State the result. Inspection is not verification.
-- Re-read the changed line, or run the command that exercises it. The Edit tool reports success, and behavior is what matters.
 - When verification is impossible, write `[X] not executed` and say why. Never claim success from inspection alone.
 
-## Operating rules
-
-- Detect capability per project. An absent capability is N/A and not a gap to fill.
-- Lock one objective and park everything else.
-- A task folder holds plain markdown, and the files are canonical.
-- Scan `.devwork/bin/` and `.devwork/bin/protocol/` before you provision new tooling. `.devwork/scripts/` does not exist, and on 2026-09-19 that error made a session rebuild an instrument already on the bench.
-- Read-only by default for any tool that touches production. Confirm in chat before a mutation, even after a general approval.
-- Do not enforce a convention the adoption data says is dead. A rule that lives only in a document is a wish.
-- Kill drift at the source. Point a document at a generated command, never at a count you typed.
-
-## Subagent classifier
-
-Classify every dispatch by the work it does before you send it. Each row fixes the agent, the model and the effort. The guard in `secret_guard.py` reads this table and denies a `general-purpose` dispatch whose `model` and `effort` are not its row's, and a named agent of the table whose `effort` is not its row's. It does not check any other agent.
-
-| work | agent | model | effort |
-|---|---|---|---|
-| bulk extract: read N files, write one structured file | `extractor` | sonnet | low |
-| external docs and versions | `web-researcher` | sonnet | medium |
-| consolidate, judge, decide over evidence | `general-purpose` | opus | high |
-| gate a finished change | `qa-gate` | opus | high |
-| load-probe a handoff | `claude -p` | the receiving session's model | the receiving session's effort |
-
-- A named agent carries its model in its frontmatter. Pass `model` and `effort` to `general-purpose` from its row.
+## Subagents
 - Pass `effort` from the row on every dispatch. This rule is the explicit instruction the Agent tool requires before it sets effort.
-- Cost follows turns and accumulated context, not output. Give an extractor compact inputs that it reads in one pass.
+- The classifier picks the row, not whether to delegate. Every delegable activity still goes to a subagent, and the main session re-verifies it. Name the row in the brief.
+- Sometimes the user moves to a topic that shares no file, no ticket and no vocabulary with the last five turns. Suggest `/clear` before you continue.
 
-## `/clear` between unrelated tasks
+## Working with the owner
+- When the owner asks to load or recover the context of a task, summarize what is settled and ask what the job is. Do not verify, re-measure or continue that task; the context is the map, not the job.
+- When the owner says to wait, stay idle: no polling, no new subagent, no new run. Say what to paste when it moves, and stop.
+- Answer the owner's proposed mechanism with the smallest bench experiment that can falsify it, and report the number and the cost it adds. Neither agree nor cite a prior rejection: a rejection is not evidence.
+- A new deliverable on applied work is the patch for the new finding, not a copy of the earlier document. If the request reads both ways, ask: patch or full revision.
+- When the owner shares an external product or link, they want the concept explained and judged for this system, not the product adopted: read it, measure what is already here, recommend.
+- Do not propose phase N+1 while phase N is half done: list what its `done_when` still lacks and fix the root cause inside the phase.
+- When the owner tells you to continue until you need them, chain the planned steps without a go between them. Stop only for their decision, a new trap or something that needs their attention, batched into one AskUserQuestion round.
+- Log each verified finding to the task's `logbook.jsonl` with `protocolo --event` as it lands, one event per finding, and a `correction` event when a later check overturns a claim.
 
-Sometimes the user moves to a topic that shares no file, no ticket and no vocabulary with the last five turns. Suggest `/clear` before you continue.
-
+## This home
+- In the execution phase of a bound task, follow the build-method skill.
