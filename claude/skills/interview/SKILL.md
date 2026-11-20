@@ -149,7 +149,7 @@ Three failures a blind reader finds and you will not:
   production fact read through it is a confident wrong answer, not an error: that read is the
   owner's database client line.
 
-Audit before handing over: a `claude -p` load-probe that may read only the artifact says what
+Audit before handing over: a `claude -p --strict-mcp-config --model <model>` load-probe that may read only the artifact says what
 it understood, what it would do first and where it would guess.
 
 ## Standing limits

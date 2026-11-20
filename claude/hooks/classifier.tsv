@@ -7,3 +7,4 @@ consolidate, judge, decide over evidence	general-purpose	opus	high
 build code	builder	opus	high
 gate a finished change	qa-gate	opus	high
 load-probe a handoff	claude -p	the receiving session's model	the receiving session's effort
+one-shot test or live call	claude -p --strict-mcp-config	haiku	low

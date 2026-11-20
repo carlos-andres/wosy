@@ -122,7 +122,7 @@ Write each event with `/Users/you/.devwork/bin/protocolo --event <task>/logbook.
 - Build a sandbox task under `<task>/research/fixtures/<node>-live/`, never a real task.
 - Take a session id with `uuidgen`, lower case, and bind it in a trial home, a separate Claude config directory that carries the settings under test: `CLAUDE_CONFIG_DIR=<a trial home> /Users/you/.devwork/bin/protocolo --bind <sandbox> --session <id>`.
 - A sandbox task that will record QA needs a ledger with one event that names a project.
-- First call: `CLAUDE_CONFIG_DIR=<a trial home> claude -p "<prompt>" --session-id <id> --model haiku --output-format json --debug=hooks --debug-file <task>/research/debug/<node>.log`.
+- First call: `CLAUDE_CONFIG_DIR=<a trial home> claude -p "<prompt>" --session-id <id> --strict-mcp-config --model haiku --output-format json --debug=hooks --debug-file <task>/research/debug/<node>.log`.
 - Next calls of the same session: `--resume <id>`.
 - In print mode a script does not run. A test command needs `--allowedTools "Bash(python3 -B -m unittest *)"` on the call.
 - The prompt asks for one tool call per expected decision, "each once, never retry".

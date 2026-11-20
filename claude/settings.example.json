@@ -230,6 +230,16 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Read|Bash|Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/homebrew/bin/python3 -S -B /Users/you/.claude/hooks/budget-record.py",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PreToolUse": [

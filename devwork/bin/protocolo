@@ -1234,8 +1234,10 @@ if "--probe" in args:
     here = os.path.dirname(prompt)
     # The prompt goes before the tool flags, which take variadic lists and would swallow it.
     # --tools limits the session to Read; --allowedTools alone only pre-approves and restricts nothing.
+    # --strict-mcp-config keeps the MCP tool schemas of ~/.claude.json out of the call, which can cost hundreds of thousands of tokens.
     cmd = shlex.split(os.environ.get("PROTOCOLO_PROBE_CMD") or "claude") + ["-p", f"{prompt} {QUESTION}",
-                                                                            "--tools", "Read", "--allowedTools", "Read"]
+                                                                            "--strict-mcp-config", "--tools", "Read", "--allowedTools",
+                                                                            "Read"]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         out, raw = r.stdout, r.stdout + (f"\n--- stderr ---\n{r.stderr}" if r.stderr.strip() else "")

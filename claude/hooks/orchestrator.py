@@ -2,11 +2,12 @@
 """orchestrator.py: the orchestrator protocol of a task-bound session (harness v2 R30; research/close/30-protocol-steps.tsv).
 
 PreToolUse on Bash, Agent|Task, Write|Edit|MultiEdit and Read, and Stop. One function per approved row, named by its id.
-Deny rows (P13, P30, P38, P55, P79, P80, P81, S43) exit 2 with the reason on stderr. Warn rows (P12, P18, P28, P84) never
-change the decision: PreToolUse gets hookSpecificOutput.additionalContext, Stop gets a top-level systemMessage. P12, P18 and
-P28 judge the main session only; a subagent payload carries agent_id. An unbound session is never judged; the binding lookup
-is anchor.py's (gate.py's). It fails open: bad input exits 0 with one line on stderr, and a rule that raises is skipped with
-one line on stderr while every other rule still judges the call.
+Deny rows (P13, P30, P38, P55, P79, P80, P81, S43, P90, P91) exit 2 with the reason on stderr. Warn rows (P12, P18, P28,
+P84) never change the decision: PreToolUse gets hookSpecificOutput.additionalContext, Stop gets a top-level systemMessage.
+P12, P18, P28 and P91 judge the main session only; a subagent payload carries agent_id. P91 reads the counter that
+budget-record.py keeps in state/budget/<session_id>; a missing or unreadable one counts as 0. An unbound session is
+judged by the UNBOUND rules only; the binding lookup is anchor.py's (gate.py's). It fails open: bad input exits 0 with one
+line on stderr, and a rule that raises is skipped with one line on stderr while every other rule still judges the call.
 The home is $CLAUDE_CONFIG_DIR, else the home holding this file; classifier.tsv, secret_guard.py and anchor.py sit in its
 hooks/.
 """
@@ -16,6 +17,8 @@ sys.dont_write_bytecode = True
 HOME = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOOKS = os.path.join(HOME, "hooks")
 CONTEXT_CUT = 450000  # about 45 % of a 1M window, the cut point of protocol section 8 step 7
+BUDGET = 125000  # Read and Bash result chars of the main session between dispatches; a default, tune it to your sessions
+READERS = {"cat", "sed", "head", "tail", "less", "bat", "rg", "grep", "awk", "jq"}
 SEPS = set("&|;()")
 ASSIGN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 # Words that run the command after them, with the options of each that take the next word as their value.
@@ -559,6 +562,35 @@ def rule_P55(c):
     return None
 
 
+def rule_P90(c):
+    for w in c.segs:
+        a = w[1:w.index("--")] if "--" in w else w[1:]
+        if not (w and os.path.basename(w[0]) in ("claude", "ensayo") and {"-p", "--print"} & set(a)) or "--help" in a:
+            continue
+        model = any(x == "--model" and "".join(a[i + 1:i + 2])[:1] not in ("", "-") or x.startswith("--model=") and x[8:]
+                    for i, x in enumerate(a))
+        if "--strict-mcp-config" not in a or not model:
+            return ("deny", "a one-shot call without --strict-mcp-config and a model sends every MCP tool schema inline "
+                            "(it can cost hundreds of thousands of uncached tokens per call). Add "
+                            f"`--strict-mcp-config --model <row model>` from {os.path.join(HOOKS, 'classifier.tsv')}.")
+    return None
+
+
+def rule_P91(c):
+    if not c.main:
+        return None
+    sid = re.sub(r"[^A-Za-z0-9_-]", "", str(c.ev.get("session_id")))
+    try:
+        n = int(open(os.path.join(HOME, "state", "budget", sid), encoding="utf-8").read())
+    except (OSError, ValueError):
+        n = 0
+    if n < BUDGET or (c.ev.get("tool_name") == "Bash" and not any(w and os.path.basename(w[0]) in READERS for w in c.segs)):
+        return None
+    return ("deny", f"the main session took {n:,} characters of Read and Bash results inline since its last dispatch, over "
+                    f"the {BUDGET:,} budget. Dispatch the reading by a row of {os.path.join(HOOKS, 'classifier.tsv')} (scout "
+                    "for where, extractor for a bulk read, archaeologist for history), which resets the budget.")
+
+
 def isolation_found(c, phase):
     """A find newer than backup/<phase>.stamp after a touch, in the main session's Bash history."""
     touched = False
@@ -658,7 +690,10 @@ RULES = {  # rule id: the tools it judges, one line per rule, run in this order
     "P81": WRITES,
     "S43": ("Bash",),
     "P84": ("Stop",),
+    "P90": ("Bash",),
+    "P91": ("Read", "Bash"),
 }
+UNBOUND = {"P90", "P91"}  # the rules that also judge an unbound session
 
 
 def main():
@@ -669,12 +704,13 @@ def main():
     from anchor import state
     st = state(ev.get("session_id"))
     hook = ev.get("hook_event_name")
-    if not st or st["error"] or hook not in ("PreToolUse", "Stop"):
+    bound = bool(st) and not st["error"]
+    if hook not in ("PreToolUse", "Stop"):
         return
     tool = "Stop" if hook == "Stop" else ev.get("tool_name")
-    c, deny, warn = Ctx(ev, st["task"]), [], []
+    c, deny, warn = Ctx(ev, st["task"] if bound else ""), [], []
     for rid, tools in RULES.items():
-        if tool not in tools:
+        if tool not in tools or not (bound or rid in UNBOUND):
             continue
         try:
             got = globals()[f"rule_{rid}"](c)

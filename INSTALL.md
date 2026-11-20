@@ -32,7 +32,7 @@ After the rewrite, paths under `$HOME/work/...` name an optional work area that 
 
 ## 4. Wire the hooks
 
-Merge `hooks`, `permissions` and `statusLine` from `claude/settings.example.json` into `~/.claude/settings.json`. Keep your own `env`, `model` and plugins. The example wires 12 hook scripts over 9 events; the task hooks do nothing in a session that is not bound to a task.
+Merge `hooks`, `permissions` and `statusLine` from `claude/settings.example.json` into `~/.claude/settings.json`. Keep your own `env`, `model` and plugins. The example wires 13 hook scripts over 9 events; the task hooks do nothing in a session that is not bound to a task, except rules P90 and P91 of `orchestrator.py`.
 
 ## 5. Build brain
 

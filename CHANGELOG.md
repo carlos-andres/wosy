@@ -4,6 +4,26 @@ All notable changes to the WOSY system. Reverse-chronological. One line per chan
 
 The deep changelog (binary shas, gate status, test counts) lives in `docs/WOSY.md` §13.
 
+## 3.0.1 — 2026-11-20
+
+A one-shot `claude -p` call sends every configured MCP tool schema inline, which can cost hundreds of thousands of uncached tokens per call. This release guards that call and bounds what the main session reads inline between two dispatches.
+
+**Upgrade note.** Merge `claude/settings.example.json` again: it adds one PostToolUse entry for `budget-record.py` and wires 13 hook scripts over 9 events.
+
+### Added
+- `claude/hooks/orchestrator.py` rule P90: a one-shot `claude -p` call is denied unless it carries `--strict-mcp-config` and a `--model` value.
+- `claude/hooks/orchestrator.py` rule P91 with `claude/hooks/budget-record.py` (PostToolUse on Read, Bash, Agent and Task): the inline read budget of the main session between two dispatches. Past 125,000 characters of Read and Bash results, a Read or a file-reading Bash call is denied until a dispatch resets the count.
+- `claude/hooks/classifier.tsv`: the row `one-shot test or live call` (`claude -p --strict-mcp-config`, haiku, low).
+
+### Changed
+- P90 and P91 also judge a session that is not bound to a task; every other rule of `orchestrator.py` still judges a bound session only.
+- `devwork/bin/protocolo`: the load-probe passes `--strict-mcp-config`.
+- `claude/skills/build-method` and `claude/skills/interview` show the two flags in their `claude -p` lines.
+- `claude/settings.example.json` wires 13 hook scripts over 9 events.
+
+### Known
+- The cleanup that the 3.0.0 entry plans for 3.0.1 is not in this release.
+
 ## 3.0.0 — 2026-11-19
 
 The repo now carries harness v2: a session can be bound to a task, and hooks hold it to the phase of that task. Tag `v2.1.0` marks the last commit before this entry.
